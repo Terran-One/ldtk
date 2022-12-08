@@ -23,7 +23,9 @@ export class Codegen {
 			) as AST.LabeledElement[];
 			// for each labeled element, extract the label and the type
 			labeledElems.forEach(elem => {
-				console.log(`\t${elem.label}`);
+				// is this label inside an optional / star?
+				const isOptional = elem.nearestAncestorWhere(node => node instanceof AST.Optional || node instanceof AST.ZeroOrMore) !== null;
+				console.log(`\t${elem.label}${isOptional ? '?' : ''}: ${elem.element.toString()}`);
 			});
 		});
 

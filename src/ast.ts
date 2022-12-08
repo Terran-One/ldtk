@@ -8,6 +8,11 @@ export class Node {
 				// @ts-ignore
 				this[key]._parent = this;
 			}
+
+			if (key !== '_parent' && this[key] instanceof List) {
+				// @ts-ignore
+				this[key].forEach((item: Node) => item._parent = this);
+			}
 		}
 	}
 
@@ -89,7 +94,6 @@ export class List<T extends Node> extends Node {
 		}
 		return nodes;
 	}
-	
 
 	static empty<T extends Node>(): List<T> {
 		return new List<T>([]);
