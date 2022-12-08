@@ -75,13 +75,15 @@ export class ANTLRv4ASTVisitor extends AbstractParseTreeVisitor<any> implements 
 		return null;
 	}
 
-	visitGrammarSpec(ctx: GrammarSpecContext): any {
+	visitGrammarSpec(ctx: GrammarSpecContext): AST.GrammarSpec {
 		let grammarDecl = this.visitGrammarDecl(ctx.grammarDecl());
 		let rules = this.visitRules(ctx.rules());
 		return new AST.GrammarSpec(
 			grammarDecl.grammarType,
 			grammarDecl.identifier,
-			rules);
+			rules
+		);
+
 	}
 
 	visitGrammarDecl(ctx: GrammarDeclContext): any {
@@ -142,15 +144,15 @@ export class ANTLRv4ASTVisitor extends AbstractParseTreeVisitor<any> implements 
 
 	}
 
-	visitRules(ctx: RulesContext): any {
-		return ctx.ruleSpec().map(x => this.visitRuleSpec(x));
+	visitRules(ctx: RulesContext): AST.List<AST.ParserRule> {
+		return AST.List.of(ctx.ruleSpec().map(x => this.visitRuleSpec(x)));
 	}
 
-	visitRuleSpec(ctx: RuleSpecContext): any {
+	visitRuleSpec(ctx: RuleSpecContext): AST.ParserRule {
 		if (ctx.parserRuleSpec()) {
 			return this.visitParserRuleSpec(ctx.parserRuleSpec()!);
 		} else {
-			return this.visitLexerRuleSpec(ctx.lexerRuleSpec()!);
+			throw new Error("Not implemented");
 		}
 	}
 
@@ -205,8 +207,8 @@ export class ANTLRv4ASTVisitor extends AbstractParseTreeVisitor<any> implements 
 		return new AST.Block(alts);
 	}
 
-	visitRuleAltList(ctx: RuleAltListContext): AST.Alt[] {
-		return ctx.labeledAlt().map(x => this.visitLabeledAlt(x));
+	visitRuleAltList(ctx: RuleAltListContext): AST.List<AST.Alt> {
+		return AST.List.of(ctx.labeledAlt().map(x => this.visitLabeledAlt(x)));
 	}
 
 	visitLabeledAlt(ctx: LabeledAltContext): AST.Alt {
@@ -262,12 +264,12 @@ export class ANTLRv4ASTVisitor extends AbstractParseTreeVisitor<any> implements 
 
 	}
 
-	visitAltList(ctx: AltListContext): AST.Alt[] {
-		return ctx.alternative().map(x => this.visitAlternative(x));
+	visitAltList(ctx: AltListContext): AST.List<AST.Alt> {
+		return AST.List.of(ctx.alternative().map(x => this.visitAlternative(x)));
 	}
 
 	visitAlternative(ctx: AlternativeContext): AST.Alt {
-		let elements = ctx.element().map(x => this.visitElement(x));
+		let elements = AST.List.of(ctx.element().map(x => this.visitElement(x)));
 		return new AST.Alt(elements);
 	}
 
@@ -345,8 +347,8 @@ export class ANTLRv4ASTVisitor extends AbstractParseTreeVisitor<any> implements 
 		}
 	}
 
-	visitBlockSet(ctx: BlockSetContext): AST.SetElement[] {
-		return ctx.setElement().map(x => this.visitSetElement(x));
+	visitBlockSet(ctx: BlockSetContext): AST.List<AST.SetElement> {
+		return AST.List.of(ctx.setElement().map(x => this.visitSetElement(x)));
 	}
 
 	visitSetElement(ctx: SetElementContext): AST.SetElement {
