@@ -1,6 +1,6 @@
-import {ParserGrammar, LexerGrammar, $} from '../../src/grammar';
+import {ParserGrammar, LexerGrammar, $, _} from '../../src/grammar';
 import {mode, push, not, choice} from '../../src/grammar';
-import {SPACE, TAB, NL, CR, EOF} from '../../src/grammar';
+import {SPACE, TAB, NL, CR, EOF, WILD} from '../../src/grammar';
 
 export const lexerGrammar = new LexerGrammar("CWScriptLexer", {
 	CONTRACT: `contract`,
@@ -15,6 +15,9 @@ export const lexerGrammar = new LexerGrammar("CWScriptLexer", {
 	MUL: `*`,
 	AS: `as`,
 	COMMA: `,`,
+	QUOTE: `"`,
+
+	StringLiteral: $(`"`, not(`"`).zeroOrMore(), `"`),
 
 	Ident: $(['_', 'a-z', 'A-Z'], $(['_', 'a-z', 'A-Z', '0-9']).zeroOrMore()),
 
@@ -29,7 +32,7 @@ export const lexerGrammar = new LexerGrammar("CWScriptLexer", {
 			popMode: true
 		},
 		OTHER: {
-			pattern: not('*/'),
+			pattern: WILD.oneOrMore(),
 			skip: true
 		}
 	},
@@ -39,43 +42,41 @@ const T = lexerGrammar.getTokens();
 export const parserGrammar = new ParserGrammar("CWScriptParser", lexerGrammar, {
 
 	sourceFile: $(
-		$("topLevelStmt").zeroOrMore(),
+		_("topLevelStmt").zeroOrMore(),
 		EOF
 	),
 
-	topLevelStmt: $(
-		"contractDefn"
-	),
+	topLevelStmt: _("contractDefn"),
 
 	contractDefn: $(
 		T.CONTRACT,
-		{name: $("ident")},
-		$(T.EXTENDS, {baseContracts: $("identList")}).optional(),
-		$(T.IMPLEMENTS, {interfaces: $("identList")}).optional(),
-		"contractBody"
+		{name: _("ident")},
+		$(T.EXTENDS, {baseContracts: _("identList")}).optional(),
+		$(T.IMPLEMENTS, {interfaces: _("identList")}).optional(),
+		_("contractBody")
 	),
 
 	importStmt: {
-		ImportAllStmt: $(T.IMPORT, T.MUL, T.FROM, {fileName: $("StringLiteral")}),
+		ImportAllStmt: $(T.IMPORT, T.MUL, T.FROM, {fileName: T.StringLiteral}),
 		ImportItemStmt: $(
 			T.IMPORT,
 			choice(
-				$(T.LPAREN, {items: $("importList")}, T.COMMA.optional(), T.RPAREN),
-				$({items: $("importList")})
+				$(T.LPAREN, {items: _("importList")}, T.COMMA.optional(), T.RPAREN),
+				{items: _("importList")}
 			),
 			T.FROM,
-			{fileName: $("StringLiteral")}
+			{fileName: $(_("StringLiteral"))}
 		)
 	},
 
 	importList: $(
-		{[push("importItems")]: $("importItem")},
-		$('COMMA', {[push("importItems")]: $("importItem")}).zeroOrMore()
+		{[push("importItems")]: _("importItem")},
+		$(T.COMMA, {[push("importItems")]: _("importItem")}).zeroOrMore()
 	),
 
 	importItem: $(
-		{symbol: $("ident")},
-		$(T.AS, {alias: $("ident")}).optional()
+		{symbol: _("ident")},
+		$(T.AS, {alias: _("ident")}).optional()
 	),
 
 	contractBody: $(

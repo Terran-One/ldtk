@@ -1,4 +1,6 @@
-function isPOJO(arg: any): arg is object {
+export type POJO = { [key: string]: any };
+
+function isPOJO(arg: any): arg is POJO {
 	if (arg == null || typeof arg !== 'object') {
 		return false;
 	}
@@ -7,6 +9,10 @@ function isPOJO(arg: any): arg is object {
 		return true; // `Object.create(null)`
 	}
 	return proto === Object.prototype;
+}
+
+function isAssignObj(arg: any): arg is AssignObj {
+	return isPOJO(arg) && Object.keys(arg).length === 1;
 }
 
 function isParenthesized(str: string): boolean {
@@ -27,13 +33,14 @@ export class ParserGrammar<L extends LexerRulesDefn, T extends ParserRulesDefn> 
 
 	constructor(public name: string, public lexerGrammar: LexerGrammar<L>, defn: T = {} as T) {
 		Object.entries(defn).forEach(([name, rule]) => {
-			if (isPOJO(rule)) {
-				this.rules[name] = new ParserRule(name, new ChoiceWithLabels(Object.entries(rule).map(([label, node]) => ({
-					label,
-					node
-				}))));
-			} else {
+			if (rule instanceof Node) {
 				this.rules[name] = new ParserRule(name, rule);
+			} else {
+				this.rules[name] = new ParserRule(name, new ChoiceWithLabels(null,
+					Object.entries(rule).map(([label, node]) => ({
+						label,
+						node
+					}))));
 			}
 		});
 	}
@@ -84,18 +91,15 @@ export function mode(name: string): `__mode__${string}` {
 	return ('__mode__' + name) as `__mode__${string}`;
 }
 
-type _LexerRulesDefn = {
-	[k: string]: any;
-}
-
-
 export type LexerRulesDefn = {
 	[k: string]: ({
 		[x: string]: LexerRuleDefn
 	} | LexerRuleDefn);
 };
 
-export type ParserRulesDefn = { [k: string]: Node | object };
+export type AssignObj<Name extends string = string, Value extends Node = Node> = { [k in Name]: Value };
+
+export type ParserRulesDefn = { [k: string]: Node | POJO };
 
 export type _TokenNames<T extends LexerRulesDefn> = {
 	[k in keyof T]: k extends `__mode__${infer M}` ? keyof T[k] : k;
@@ -113,7 +117,7 @@ export type TokenRefMap<T extends LexerRulesDefn> = {
 export type Modes<T extends LexerRulesDefn> = _Modes<T>[keyof _Modes<T>] | 'default';
 
 export type LexerRuleDefn =
-	string // literal
+	string // string literal
 	| (string | CharRange)[] // character class
 	| Node
 	| { pattern: string | (string | CharRange)[] | Node } & LexerRuleCommands;
@@ -213,11 +217,13 @@ export class LexerGrammar<T extends LexerRulesDefn> {
 		return res;
 	}
 
-	nodeToANTLR(node: string | (string | CharRange)[] | Node): string {
+	nodeToANTLR(node: string | (string | Literal | CharRange)[] | Node): string {
 		if (typeof node === 'string') {
 			return `'${node}'`;
 		} else if (Array.isArray(node)) { // char class
-			return this.nodeToANTLR(new CharClass(null, node));
+			return this.nodeToANTLR($(node));
+		} else if (node instanceof Ref) {
+			return node.name;
 		} else if (node instanceof Literal) {
 			return `'${node.value}'`;
 		} else if (node instanceof Sequence) {
@@ -234,8 +240,8 @@ export class LexerGrammar<T extends LexerRulesDefn> {
 			return `~(${this.nodeToANTLR(node.element)})`;
 		} else if (node instanceof CharClass) {
 			return `[${node.elements.map(x => {
-				if (typeof x === 'string') {
-					return x;
+				if (x instanceof Literal) {
+					return x.value;
 				} else {
 					return `${x.from}-${x.to}`;
 				}
@@ -277,9 +283,10 @@ export function optional(node: Node): Optional {
 	return new Optional(null, node);
 }
 
-export function choice(...alts: Node[]): Choice {
-	return new Choice(null, alts);
+export function choice(...alts: (Node | string | (string | Literal | CharRange)[] | AssignObj)[]): Choice {
+	return new Choice(null, alts.map(x => Sequence.resolveElement(x)));
 }
+
 
 export class ZeroOrMore extends Node {
 	constructor(public parent: Node | null, public element: Node, public greedy: boolean = false) {
@@ -306,7 +313,7 @@ export class Optional extends Node {
 }
 
 export class ChoiceWithLabels extends Node {
-	constructor(public alts: { label: string, node: Node }[]) {
+	constructor(public parent: Node | null, public alts: { label: string, node: Node }[]) {
 		super();
 	}
 }
@@ -321,14 +328,20 @@ export class Sequence extends Node {
 		super(parent);
 	}
 
-	static resolveElement(x: string | (string | CharRange)[] | Node): Node {
+	static resolveElement(x: string): Literal;
+	static resolveElement(x: (string | Literal | CharRange)[]): CharClass;
+	static resolveElement(x: AssignObj): AssignChild;
+	static resolveElement<T extends Node>(x: T): T;
+	static resolveElement(x: string | (string | Literal | CharRange)[] | AssignObj | Node): Node;
+
+	static resolveElement(x: unknown): unknown {
 		if (typeof x === 'string') {
-			return new Ref(null, x);
+			return new Literal(null, x);
 		} else if (Array.isArray(x)) {
-			return new CharClass(null, x);
-		} else if (isPOJO(x)) {
+			return new CharClass(null, x.map(Sequence.resolveElement) as (Literal | CharRange)[]);
+		} else if (isAssignObj(x)) {
 			let name = Object.keys(x)[0];
-			let value = (x as any)[name];
+			let value = x[name];
 			if (name.startsWith('__push__')) {
 				return new AssignChild(null, name.substring(8), AssignOp.PUSH, value);
 			}
@@ -350,13 +363,13 @@ export class Not extends Node {
 }
 
 export class CharClass extends Node {
-	constructor(public parent: Node | null, public elements: (string | CharRange)[] = []) {
+	constructor(public parent: Node | null, public elements: (Literal | CharRange)[] = []) {
 		super(parent);
 	}
 }
 
 export class CharRange extends Node {
-	constructor(public parent: Node | null, public from: string, public to: string) {
+	constructor(public parent: Node | null, public from: Literal, public to: Literal) {
 		super(parent);
 	}
 }
@@ -379,9 +392,12 @@ export class AssignChild extends Node {
 	}
 }
 
-
 export function $(...args: [any, ...any[]]): Sequence {
 	return new Sequence(null, args.map(x => Sequence.resolveElement(x)));
+}
+
+export function _(x: string): Ref {
+	return new Ref(null, x);
 }
 
 export function not(el: string | Node): Not {
@@ -402,8 +418,9 @@ export class Literal extends Node {
 	}
 }
 
-export const TAB = '\\t';
-export const NL = '\\n';
-export const CR = '\\r';
-export const SPACE = ' ';
+export const TAB = new Literal(null, '\\t');
+export const NL = new Literal(null, '\\n');
+export const CR = new Literal(null, '\\r');
+export const SPACE = new Literal(null, ' ');
+export const WILD = new Literal(null, '.');
 export const EOF = new TokenRef(null, 'default', 'EOF');
