@@ -1,3 +1,5 @@
+import { mergeRules } from "./common";
+import { createMatcher, LexerMatcher, LexerMatcherType, MatchAll, MatchAny, MatchAnyChar, MatchLiteral, MatchNot, MatchRange, MatchToken, MatchTokenFactory } from "./matcher";
 
 interface LexerMode {
   name: string;
@@ -9,7 +11,7 @@ interface LexerMode {
 
 interface LexerRule {
   name: string;
-  match: Matcher;
+  match: LexerMatcher;
   
   fragment: boolean;
   skip: boolean;
@@ -47,12 +49,12 @@ class LexerBuilder {
   ) {}
   
   rules(rules: LexerDef) {
-    mergeRules(this._rules, typeof rules === 'function' ? rules(api()) : rules);
+    mergeRules(this._rules, typeof rules === 'function' ? rules(createAPI()) : rules);
     return this;
   }
   
   mode(name: string, rules: LexerDef, merge = false) {
-    rules = typeof rules === 'function' ? rules(api(name)) : rules;
+    rules = typeof rules === 'function' ? rules(createAPI(name)) : rules;
     
     if (this._modes[name]) {
       if (!merge) throw Error(`Lexer Mode ${name} already exists, and merge is false`);
@@ -100,7 +102,7 @@ class LexerRuleBuilder {
   
   constructor(
     public _mode: string | undefined,
-    public _match: Matcher,
+    public _match: LexerMatcher,
   ) {}
   
   fragment() {
@@ -173,246 +175,119 @@ class LexerRuleBuilder {
     if (elem instanceof LexerRuleBuilder) return elem;
     return new LexerRuleBuilder(
       mode,
-      normalizeMatchElement(elem),
+      parseMatchElement(elem),
     );
-  }
-}
-
-function common<T extends object>(obj: T): T & Omit<MatcherCommon, 'toAntlr'> {
-  return {
-    get optional(): MatchOptional {
-      const result = common({
-        type: '?' as const,
-        match: this as any as Matcher,
-        toAntlr() {
-          return `(${this.match.toAntlr()})?`;
-        },
-      })
-      return result;
-    },
-    get plus(): MatchMany {
-      const result = common({
-        type: '+' as const,
-        match: this as any as Matcher,
-        toAntlr() {
-          return `(${this.match.toAntlr()})+`;
-        },
-        get lazy(): MatchManyLazy {
-          const result = common({
-            type: '+?' as const,
-            match: this.match,
-            toAntlr() {
-              return `(${this.match.toAntlr()})+?`;
-            },
-          })
-          return result;
-        },
-      })
-      return result;
-    },
-    get star(): MatchMany {
-      const result = common({
-        type: '*' as const,
-        match: this as any as Matcher,
-        toAntlr() {
-          return `(${this.match.toAntlr()})*`;
-        },
-        get lazy(): MatchManyLazy {
-          const result = common({
-            type: '*?' as const,
-            match: this.match,
-            toAntlr() {
-              return `(${this.match.toAntlr()})*?`;
-            },
-          })
-          return result;
-        },
-      })
-      return result;
-    },
-    ...obj,
   }
 }
 
 type LexerDef = LexerRuleMap | ((api: LexerAPI) => LexerRuleMap);
 
-type LexerAPI = ReturnType<typeof api>;
-function api(mode?: string) {
-  const self = {
-    frag(...matches: MatchElement[]): LexerRuleBuilder {
-      return new LexerRuleBuilder(mode, self.seq(...matches)).fragment();
-    },
-    
-    lit(pattern: string): MatchLiteral {
-      return normalizeMatchElement(pattern);
-    },
-    
-    not(match: MatchElement): Matcher {
-      match = normalizeMatchElement(match);
-      if (match.type === '~') return match.match;
-      const result = common({
-        type: '~' as const,
-        match,
-        toAntlr() {
-          return `~(${this.match})`;
-        },
-      })
-      return result;
-    },
-    
-    or(...matches: MatchElement[]): MatchAny {
-      const result = common({
-        type: '|' as const,
-        items: matches.map(normalizeMatchElement),
-        toAntlr() {
-          return '(' + this.items.map(i => i.toAntlr()).join(' | ') + ')';
-        },
-      })
-      return result;
-    },
-    
-    seq(...matches: MatchElement[]): MatchAll {
-      const result = common({
-        type: '&' as const,
-        items: matches.map(normalizeMatchElement),
-        toAntlr() {
-          return '(' + this.items.map(i => i.toAntlr()).join(' ') + ')';
-        },
-      })
-      return result;
-    },
-    
-    range(def: string): MatchRange {
-      const result = common({
-        type: '[]' as const,
-        def,
-        toAntlr() {
-          return `[${this.def}]`;
-        },
-      })
-      return result;
-    },
-    
-    rule(...matches: MatchElement[]): LexerRuleBuilder {
-      return new LexerRuleBuilder(mode, self.seq(...matches));
-    },
-    
-    get any(): MatchAnyChar {
-      const result = common({
-        type: '.' as const,
-        toAntlr() {
-          return '.';
-        },
-      })
-      return result;
-    },
-    
-    T: new Proxy<MatchTokenFactory>({}, {
-      get(_, p: string): MatchToken {
-        const result = common({
-          type: 'token' as const,
-          name: p,
-          toAntlr() { return this.name },
-        })
-        return result;
+const common = <T extends object>(obj: T) => createMatcher.pin<LexerMatcherType>()(obj);
+type LexerAPI = ReturnType<typeof createAPI>;
+
+function createAPI(mode?: string) {
+  function api(match: string): MatchLiteral<LexerMatcherType>;
+  function api(match: string[]): MatchRange<LexerMatcherType>;
+  function api(match: MatchElement): LexerMatcher;
+  function api(...matches: MatchElement[]): MatchAll<LexerMatcherType>;
+  function api(...matches: MatchElement[]): any {
+    if (matches.length === 0) throw Error('No matches provided');
+    if (matches.length === 1) return parseMatchElements(matches)[0];
+    return api.seq(...matches);
+  }
+  
+  /** A sequence of matches. All of these must match in sequence. */
+  api.seq = (...match: MatchElement[]): MatchAll<LexerMatcherType> => {
+    const result = common({
+      type: '&' as const,
+      match: parseMatchElements(match),
+      toAntlr() {
+        return '(' + this.match.map(m => m.toAntlr()).join(' ') + ')';
       },
-    }),
-  };
-  return self;
+    })
+    return result;
+  }
+  
+  /** A selection of alternative choices. Any one of these must match in parallel. */
+  api.or = (...match: MatchElement[]): MatchAny<LexerMatcherType> => {
+    const result = common({
+      type: '|' as const,
+      match: parseMatchElements(match),
+      toAntlr() {
+        return '(' + this.match.map(m => m.toAntlr()).join(' | ') + ')';
+      },
+    })
+    return result;
+  }
+  
+  /** Negate given matches. Anything matches but these. */
+  api.not = (...match: MatchElement[]): MatchNot<LexerMatcherType> => {
+    const result = common({
+      type: '~' as const,
+      match: api(...match),
+      toAntlr() {
+        return `~(${this.match.toAntlr()})`;
+      },
+    })
+    return result;
+  }
+  
+  /** Explicitly wrap given matches in a `LexerRuleBuilder` which exposes additional rule-level operations. */
+  api.rule = (...match: MatchElement[]) => new LexerRuleBuilder(mode, api(...match));
+  /** Explicitly wrap given matches in a fragment rule. Shorthand for `api.rule(...).fragment()`. */
+  api.frag = (...match: MatchElement[]) => api.rule(...match).fragment();
+  
+  /** Match any single character */
+  api.any = ((): MatchAnyChar<LexerMatcherType> => {
+    const result = common({
+      type: '.' as const,
+      toAntlr() { return '.' },
+    })
+    return result;
+  })();
+  
+  /** Match any one named token. Combine with other matchers. */
+  api.T = MatchTokenFactory<LexerMatcherType>();
+  
+  return api;
 }
 
 type LexerRuleMap = Record<string, MatchElement | LexerRuleBuilder>;
 type LexerModeMap = Record<string, LexerRuleMap>;
 
-type MatchElement = string | Matcher;
-export type Matcher =
-  | MatchLiteral
-  | MatchAnyChar
-  | MatchRange
-  | MatchToken
-  | MatchOptional
-  | MatchMany
-  | MatchManyLazy
-  | MatchGroup // not sure why we have this one since it's implicitly part of any & all...
-  | MatchAny
-  | MatchAll
-  | MatchNot
-interface MatcherCommon {
-  /** Produce the ANTLR grammar string resembling this matcher. */
-  toAntlr(): string;
-  optional: MatchOptional;
-  star: MatchMany;
-  plus: MatchMany;
-}
-export type MatchLiteral = MatcherCommon & {
-  type: 'literal';
-  match: string;
-}
-export type MatchAnyChar = MatcherCommon & {
-  type: '.';
-}
-export type MatchRange = MatcherCommon & {
-  type: '[]';
-  def: string;
-}
-export type MatchToken = MatcherCommon & {
-  type: 'token';
-  name: string;
-}
-export type MatchOptional = MatcherCommon & {
-  type: '?';
-  match: Matcher;
-}
-export type MatchMany = MatcherCommon & {
-  type: '*' | '+';
-  match: Matcher;
-  lazy: MatchManyLazy;
-}
-export type MatchManyLazy = MatcherCommon & {
-  type: '*?' | '+?';
-  match: Matcher;
-}
-export type MatchGroup = MatcherCommon & {
-  type: '()';
-  match: Matcher;
-}
-export type MatchAny = MatcherCommon & {
-  type: '|';
-  items: Matcher[];
-}
-export type MatchAll = MatcherCommon & {
-  type: '&';
-  items: Matcher[];
-}
-export type MatchNot = MatcherCommon & {
-  type: '~';
-  match: Matcher;
-}
+type MatchElement = string | string[] | LexerMatcher;
+type MatchTokenFactory = Record<string, MatchToken<LexerMatcherType>>;
 
-type MatchTokenFactory = Record<string, MatchToken>;
+const parseMatchElements = (matches: MatchElement[]) => matches.map(parseMatchElement);
 
-/** Merge rules of RHS into LHS, throwing if a rule name is already in use. */
-function mergeRules(lhs: LexerRuleMap, rhs: LexerRuleMap) {
-  for (const rule in rhs)
-    if (lhs[rule]) throw Error(`Rule name ${rule} already in use`);
-  Object.assign(lhs, rhs);
-}
-
-function normalizeMatchElement(item: string): MatchLiteral;
-function normalizeMatchElement<T extends Matcher>(item: T): T;
-function normalizeMatchElement(item: MatchElement): Matcher;
-function normalizeMatchElement(item: MatchElement) {
-  if (typeof item === 'string') {
+function parseMatchElement(match: string): MatchLiteral<LexerMatcherType>;
+function parseMatchElement(match: string[]): MatchRange<LexerMatcherType>;
+function parseMatchElement<T extends LexerMatcher>(match: T): T;
+function parseMatchElement(match: MatchElement): LexerMatcher;
+function parseMatchElement(match: MatchElement) {
+  if (typeof match === 'string') {
+    if (!match) throw Error('Empty literal');
     const result = common({
       type: 'literal' as const,
-      match: item,
+      match,
       toAntlr() {
         return `'${escapeLiteral(this.match)}'`;
       },
     });
     return result;
   }
-  return item;
+  if (match && 'length' in match && typeof match.length === 'number') {
+    const result = common({
+      type: '[]' as const,
+      def: match.join(''),
+      toAntlr() {
+        return `[${this.def}]`;
+      },
+    });
+    if (!result.def) throw Error('Empty range');
+    return result;
+  }
+  return match;
 }
 
 const escapeLiteral = (literal: string) =>
