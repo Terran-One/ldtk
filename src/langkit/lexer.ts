@@ -246,8 +246,8 @@ function createAPI(mode?: string) {
     return result;
   })();
   
-  /** Match any one named token. Combine with other matchers. */
-  api.T = MatchTokenFactory<LexerMatcherType>();
+  /** Match any one named token. Token name must be capitalized. Combine with other matchers. */
+  api.T = MatchTokenFactory<LexerMatcherType>('token');
   
   return api;
 }
