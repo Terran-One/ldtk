@@ -1,14 +1,14 @@
 import { CharStreams, CommonTokenStream } from 'antlr4ts';
-import { BaseVisitor } from './visitor';
+import { Visitor } from './Visitor';
 
 export class Parser {
 	constructor(public _lexer: AntlrLexer, public _parser: AntlrParser) {
 	}
 
-	public buildAST(): AST {
-		let tree = this._parser.grammarSpec();
-		let visitor = new BaseVisitor();
-		return visitor.visitGrammarSpec(tree);
+	public buildAST() {
+		let tree = this._parser.root();
+		let visitor = new Visitor();
+		return visitor.visit(tree);
 	}
 
 	public static fromString(source: string): Parser {
@@ -17,7 +17,7 @@ export class Parser {
 		return new Parser(antlrLexer, antlrParser);
 	}
 
-	public static parse(source: string): AST {
+	public static parse(source: string) {
 		return Parser.fromString(source).buildAST();
 	}
 }
