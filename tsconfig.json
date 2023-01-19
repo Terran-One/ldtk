@@ -1,6 +1,6 @@
 {
   "include": ["src", "types"],
-  "exclude": ["/node_modules/", "./src/**/*.spec.ts"],
+  "exclude": ["/node_modules/", "./src/**/*.spec.ts", "./data/**/*"],
   "compilerOptions": {
     "experimentalDecorators": true,
 	"allowSyntheticDefaultImports": true,
