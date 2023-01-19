@@ -139,7 +139,7 @@ function createAPI(mode?: string) {
       type: '&' as const,
       match: parseMatchElements(match),
       toAntlr() {
-        return '(' + this.match.map(m => m.toAntlr()).join(' ') + ')';
+        return this.match.map(m => m.toAntlr()).join(' ');
       },
     })
     return result;
