@@ -48,7 +48,7 @@ export type MatchToken<K extends MatcherType>  = MatcherCommons<K> & {
 export type MatchAlias<K extends MatcherType> = MatcherCommons<K> & {
   type: 'alias';
   name: string;
-  match: Matcher<K>;
+  match: MatchToken<K>[];
 }
 export type MatchOptional<K extends MatcherType> = MatcherCommons<K> & {
   type: '?';

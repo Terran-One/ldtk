@@ -158,17 +158,20 @@ function createAPI(mode?: string) {
   }
   
   /** Rename a given matcher with the given `name`. If the name ends on `[]`, it'll collect all values assigned to the same alias. */
-  api.alias = (name: string, ...match: MatchElement[]): MatchAlias<ParserMatcherType> => {
+  api.alias = (name: string, ...match: MatchToken<ParserMatcherType>[]): MatchAlias<ParserMatcherType> => {
     if (!match.length) throw Error('Alias needs at least one matcher');
     const result = common({
       type: 'alias' as const,
       name,
-      match: api(...match),
+      match,
       toAntlr(): string {
+        const match = this.match.length === 1
+          ? this.match[0].toAntlr()
+          : '(' + this.match.map(m => m.toAntlr()).join(' | ') + ')';
         if (this.name.endsWith('[]')) {
-          return `${this.name.substring(0, this.name.length-2)}+=${this.match.toAntlr()}`;
+          return `${this.name.substring(0, this.name.length-2)}+=${match}`;
         } else {
-          return `${this.name}=${this.match.toAntlr()}`;
+          return `${this.name}=${match}`;
         }
       },
     })
