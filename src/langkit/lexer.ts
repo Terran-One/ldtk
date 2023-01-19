@@ -122,8 +122,8 @@ class LexerRuleBuilder {
   }
   
   pushMode(mode: string) {
-    if (this._channel !== undefined) throw Error(`pushMode already set to ${this._mode}`);
-    this._channel = mode;
+    if (this._pushMode !== undefined) throw Error(`pushMode already set to ${this._mode}`);
+    this._pushMode = mode;
     return this;
   }
   
@@ -248,6 +248,21 @@ function createAPI(mode?: string) {
   
   /** Match any one named token. Token name must be capitalized. Combine with other matchers. */
   api.T = MatchTokenFactory<LexerMatcherType>('token');
+  
+  /** Create an unescaped string literal. Ideal for matching sequences like '\n' or '\t'.
+   * 
+   * ## Usage
+   * ```typescript
+   * Lexer.create('ExampleLexer', $ => {
+   *   const { l } = $;
+   *   return {
+   *     NL: l`\n`,
+   *     TAB: l`\t`,
+   *   }
+   * });
+   * ```
+   */
+  api.l = String.raw;
   
   return api;
 }
