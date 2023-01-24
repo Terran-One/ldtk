@@ -2,6 +2,8 @@ import child_process from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
 
+export const DIR = 'generated';
+
 export type SpawnPKM = 'none' | 'yarn' | 'npm' | undefined;
 
 type SpawnResult = {

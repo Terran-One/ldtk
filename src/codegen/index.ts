@@ -1,10 +1,9 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { Project, SourceFile, SyntaxKind } from 'ts-morph';
+import { IndentationText, Project, SourceFile, SyntaxKind } from 'ts-morph';
 import { Parser } from '../langkit';
-import { spawn, SpawnPKM, tplDir } from './utils';
-
-const DIR = 'generated';
+import { generateVisitor } from './generate-visitor';
+import { DIR, spawn, SpawnPKM, tplDir } from './utils';
 
 export type GenerateOptions = {
   /** Package manager to use in order to invoke antlr4ts. Determined based on presence of package-lock.json or yarn.lock
@@ -33,23 +32,37 @@ async function runAntlr(parser: Parser, pkm: SpawnPKM) {
 		fs.writeFile(parserFile, parser.toAntlr()),
 	]);
 	
-	let { code } = await spawn('antlr4ts', ['-visitor', lexerFile], pkm);
+	let { code } = await spawn('antlr4ts', [lexerFile], pkm);
 	if (code) {
     throw Error(`antlr4ts on lexer exited with code ${code}`);
   }
-	({ code } = await spawn('antlr4ts', ['-visitor', parserFile]), pkm);
+  
+  // we generate our own visitor. there's no point in generating an unused listener lib
+  // or an interface that's applied to a completely auto-generated class
+	({ code } = await spawn('antlr4ts', ['-no-visitor', '-no-listener', parserFile]), pkm);
 	if (code) throw Error(`antlr4ts on parser exited with code ${code}`);
 }
 
 async function generateCode(parser: Parser) {
 	const project = new Project();
+  project.manipulationSettings.set({ indentationText: IndentationText.TwoSpaces });
   
   await Promise.all([
+    generateUtils(project, parser),
     generateParser(project, parser),
     generateVisitor(project, parser),
   ])
   
   await project.save();
+}
+
+/** Generate utils.ts from template */
+async function generateUtils(project: Project, parser: Parser) {
+  const fs = project.getFileSystem();
+  const srcPath = `${await tplDir()}/utils.tpl.ts`;
+  const destPath = `${DIR}/utils.ts`;
+  await fs.copy(srcPath, destPath);
+  project.addSourceFileAtPath(destPath);
 }
 
 /** Generate the concrete Parser with Middleware support from the given Parser definition. */
@@ -85,20 +98,6 @@ async function generateParser(project: Project, parser: Parser) {
   const stmt = method.getStatements()[0].asKindOrThrow(SyntaxKind.VariableStatement);
   const decl = stmt.getDeclarations()[0];
   decl.set({ initializer: `this._parser['${rootRule.name}']()` });
-}
-
-/** Generate an Antlr-specific visitor from the given Parser definition. */
-async function generateVisitor(project: Project, parser: Parser) {
-  const VisitorIdent = `${parser.name}Visitor`;
-  const file = project.createSourceFile(`${DIR}/Visitor.ts`, undefined, { overwrite: true });
-  
-  const root = parser.rules[0];
-  file.addImportDeclarations([
-    {
-      moduleSpecifier: `./antlr/${VisitorIdent}`,
-      namedImports: [VisitorIdent],
-    },
-  ]);
 }
 
 function replaceClass(file: SourceFile, original: string, replacement: string) {

@@ -16,7 +16,7 @@ import {
 
 type MatchAnyLabels = _MatchAnyLabels<ParserMatcherType>;
 
-type ParserRule =
+export type ParserRule =
   | { // Pretty much all matchers but labeled options
       name: string;
       match: ParserMatcher;
