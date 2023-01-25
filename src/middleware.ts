@@ -1,4 +1,4 @@
-import type { Parser } from 'langkit';
+import type { Parser } from './langkit';
 import type { Tail } from './types';
 
 export type Middleware<In, Out> = {
