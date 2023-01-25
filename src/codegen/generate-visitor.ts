@@ -219,26 +219,26 @@ class RuleVisitorWriter {
     const { _writer: writer, _rule: rule } = this;
     if (!writer || !rule) throw Error('RuleVisitorWriter unbound');
     
-    for (let i = 0; i < matcher.match.length; ++i) {
-      const choice = matcher.match[i];
-      const { label } = choice;
-      
-      writer.writeLine(`const ctx${i} = ctx.getRuleContexts(${contextName(label)})[0];`);
-      writer.writeLine(`const opt${i} = ctx${i} && this.${visitorName(label)}(ctx${i});`);
-      writer.newLine();
-    }
+    const choices = matcher.match;
+    writer.write('const opts = [').newLine().indent(() => {
+      choices.forEach(({label}) => {
+        const ctxName = contextName(label);
+        writer.writeLine(`ctx instanceof ${ctxName} && this.${visitorName(label)}(ctx as ${ctxName}),`);
+      });
+    }).write('];').newLine();
     
+    writer.writeLine('if (opts.filter(ctx => !!ctx).length > 1) throw Error("Multiple Label Contexts found");');
     writer.newLine();
+    
+    writer.writeLine('const choice = opts.find(ctx => !!ctx);');
+    writer.writeLine('if (!choice) throw Error("No Label Context");');
+    writer.newLine();
+    
     writer.write(`return `);
     writeObject(writer, obj => {
       obj.write('type', w => w.quote('labels'));
       obj.write('name', w => w.quote(rule.name));
-      
-      obj.write('choice', w => {
-        // form a really long chain of val0 || val1 || ...
-        const parts = matcher.match.map((_, i) => `opt${i}`);
-        w.write(parts.join(' || '));
-      });
+      obj.write('choice', 'choice');
     });
     writer.write(';');
   }
