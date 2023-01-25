@@ -1,10 +1,9 @@
 import { Parser } from 'langkit';
-import { MatchAnyLabels as _MatchAnyLabels, MatchEOF, MatchToken, ParserMatcher, ParserMatcherType } from '../langkit/matcher';
+import { MatchAnyLabels as _MatchAnyLabels, ParserMatcher, ParserMatcherType } from '../langkit/matcher';
 import { ParserRule } from '../langkit/parser';
 import { ClassDeclaration, CodeBlockWriter, Project, SourceFile } from 'ts-morph';
 import { DIR } from './utils';
-import { writeObject, writeType } from './code-writer';
-import { type } from 'os';
+import { writeObject } from './code-writer';
 
 type MatchAnyLabels = _MatchAnyLabels<ParserMatcherType>;
 
