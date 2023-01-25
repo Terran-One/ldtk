@@ -45,6 +45,12 @@ export async function generateVisitor(project: Project, parser: Parser) {
     namedImports: ['collect'],
   });
   
+  // alias root rule AST node for convenience
+  file.addTypeAlias({
+    name: 'ASTRootNode',
+    type: astNodeName(root.name),
+    isExported: true,
+  });
   // generate AST node types returned by visitor methods
   generateASTTypes(parser, file);
   
