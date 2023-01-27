@@ -14,7 +14,7 @@ const parser = Parser.create('ToyParser', lexer, $ => {
     // to your processing pipeline.
     root: $.options({
       FunctionDefRoot: r.fnDef,
-      ExprRoot: exprx,
+      ExprxRoot: exprx,
       FnCallNakedRoot: r.fnCallNaked,
     }),
     
