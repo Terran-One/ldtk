@@ -85,6 +85,9 @@ export async function generateVisitor(project: Project, parser: Parser) {
 }
 
 function generateASTTypes(parser: Parser, file: SourceFile) {
+  const typenames = new Set<string>();
+  
+  // base types for rules & labels
   file.addTypeAlias({
     name: 'RuleASTNodeBase',
     type: w => new CodeWriter(w).obj(typ => {
@@ -103,20 +106,29 @@ function generateASTTypes(parser: Parser, file: SourceFile) {
     isExported: true,
   });
   
+  // a type for every rule & labeled choice
   parser.rules.forEach(rule => {
     if (rule.match.type === '|+') {
-      generateLabelNodeType(file, rule, rule.match);
+      generateLabelNodeType(file, rule, rule.match, typenames);
     }
     else {
-      generateMatcherNodeType(file, rule.name, rule.match);
+      generateMatcherNodeType(file, rule.name, rule.match, typenames);
     }
+  })
+  
+  // general purpose ASTNode type which is an or-conjunction of all generated AST types
+  file.addTypeAlias({
+    name: 'ASTNode',
+    type: [...typenames].join(' | '),
+    isExported: true,
   })
 }
 
-function generateLabelNodeType(file: SourceFile, rule: ParserRule, matcher: MatchAnyLabels) {
+function generateLabelNodeType(file: SourceFile, rule: ParserRule, matcher: MatchAnyLabels, typenames: Set<string>) {
   const choices = matcher.match;
   
   // generate AST node type for overarching label rule
+  typenames.add(astNodeName(rule.name));
   file.addTypeAlias({
     name: astNodeName(rule.name),
     type: writer => {
@@ -153,17 +165,18 @@ function generateLabelNodeType(file: SourceFile, rule: ParserRule, matcher: Matc
   
   // generate a AST node type for every possible label
   choices.forEach(({ label, match }) => {
-    generateMatcherNodeType(file, label, match);
+    generateMatcherNodeType(file, label, match, typenames);
   });
 }
 
-function generateMatcherNodeType(file: SourceFile, name: string, matcher: ParserMatcher) {
+function generateMatcherNodeType(file: SourceFile, name: string, matcher: ParserMatcher, typenames: Set<string>) {
   const {
     hasEOF,
     rules,
     tokens,
   } = analyzeRule(matcher);
   
+  typenames.add(astNodeName(name));
   file.addTypeAlias({
     name: astNodeName(name),
     type: writer => {
@@ -193,7 +206,7 @@ function generateMatcherNodeType(file: SourceFile, name: string, matcher: Parser
           });
         }
         else {
-          typ.write('children', 'unknown[]');
+          typ.write('children', 'never[]');
         }
         
         if (tokens.length) {
