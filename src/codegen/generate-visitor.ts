@@ -1,9 +1,9 @@
 import { Parser } from 'langkit';
 import { MatchAnyLabels as _MatchAnyLabels, ParserMatcher, ParserMatcherType } from '../langkit/matcher';
 import { ParserRule } from '../langkit/parser';
-import { ClassDeclaration, CodeBlockWriter, Project, SourceFile } from 'ts-morph';
+import { ClassDeclaration, CodeBlockWriter, Project, SourceFile, VariableDeclarationKind } from 'ts-morph';
 import { DIR } from './utils';
-import { CodeWriter } from './code-writer';
+import { CodeWriter, ObjectWriter } from './code-writer';
 
 type MatchAnyLabels = _MatchAnyLabels<ParserMatcherType>;
 
@@ -42,7 +42,7 @@ export async function generateVisitor(project: Project, parser: Parser) {
   // import (generated) utilities
   file.addImportDeclaration({
     moduleSpecifier: './utils',
-    namedImports: ['collect'],
+    namedImports: ['capitalize', 'collect'],
   });
   
   // alias root rule AST node for convenience
@@ -54,33 +54,128 @@ export async function generateVisitor(project: Project, parser: Parser) {
   // generate AST node types returned by visitor methods
   generateASTTypes(parser, file);
   
-  // generate Visitor class
-  const cls = file.addClass({
-    name: 'Visitor',
+  // create & expose visitor object
+  file.addVariableStatement({
     isExported: true,
-  });
-  
-  // add general purpose visit method
-  cls.addMethod({
-    name: 'visit',
-    parameters: [{
-      name: 'tree',
-      type: contextName(root.name),
+    declarationKind: VariableDeclarationKind.Const,
+    declarations: [{
+      name: 'visit',
+      initializer: writer => {
+        const w = new CodeWriter(writer);
+        w.obj(obj => {
+          parser.rules.forEach(rule => {
+            if (rule.match.type === '|+') {
+              writeVisitLabel({ parser, obj, rulename: rule.name, matcher: rule.match });
+            } else {
+              writeVisitRule({ parser, obj, rulename: rule.name, matcher: rule.match });
+            }
+          })
+        });
+        w.write(';');
+      },
     }],
-    statements: `return this.${visitorName(root.name)}(tree)`,
+  });
+}
+
+interface WriteVisitRuleParams {
+  parser: Parser;
+  obj: ObjectWriter;
+  rulename: string;
+  matcher: ParserMatcher;
+}
+
+function writeVisitRule({ parser, obj, rulename, matcher }: WriteVisitRuleParams) {
+  obj.write(rulename, w => {
+    w.write(`(ctx: ${contextName(rulename)}): ${astNodeName(rulename)} => `).block(() => {
+      const {
+        hasEOF,
+        rules,
+        tokens,
+      } = analyzeRule(matcher);
+      
+      // collect sub-rules/children
+      w.write('const rules = ').obj(obj => {
+        rules.forEach(rule => {
+          obj.write(rule, `collect(ctx.getRuleContexts(${contextName(rule)})).map(item => visit.${rule}(item))`);
+        })
+      }).writeline(';');
+      
+      // return specialized ASTNode structure
+      w.write('return ');
+      w.obj(obj => {
+        obj.write('type', w => w.quote('rule'));
+        obj.write('name', w => w.quote(rulename));
+        obj.write('ctx', 'ctx');
+        
+        hasEOF && obj.write('EOF', `collect(ctx.getTokens(${parser.name}.EOF))`);
+        
+        // two reasons for using various `any`:
+        // 1) if children is empty, reduce returns unknown, which cannot be assigned to unknown[]
+        // 2) Object.values(rules) is too strict & needs to be loosened
+        obj.write('children', 'Object.values(rules).reduce((prev, curr) => [...prev as any, ...curr as any], []) as any');
+        
+        if (rules.length) {
+          obj.write('rules', 'rules');
+        }
+        
+        if (tokens.length) {
+          obj.write('tokens', w => w.obj(obj => {
+            tokens.forEach(token => {
+              obj.write(token, `collect(ctx.getTokens(${parser.name}.${token}))`);
+            })
+          }));
+        }
+      });
+    });
+  });
+}
+
+interface WriteVisitLabelParams {
+  parser: Parser;
+  obj: ObjectWriter;
+  rulename: string;
+  matcher: MatchAnyLabels;
+}
+
+function writeVisitLabel({ parser, obj, rulename, matcher }: WriteVisitLabelParams) {
+  const w = obj.writer;
+  const choices = matcher.match;
+  
+  // build visitor for this specific rule
+  obj.write(rulename, () => {
+    w.write(`(ctx: ${contextName(rulename)}): ${astNodeName(rulename)} => `).block(() => {
+      // collect child context choices
+      w.write('const opts = [').nl().indent(() => {
+        choices.forEach(({label}) => {
+          const ctxName = contextName(label);
+          w.write(`ctx instanceof ${ctxName} && visit.${label}(ctx as ${ctxName}),`);
+        });
+      }).writeline('];');
+      
+      // assert exactly one is valid
+      w.writeline('if (opts.filter(ctx => !!ctx).length > 1) throw Error("Multiple Label Contexts found");');
+      w.nl();
+      
+      w.writeline('const choice = opts.find(ctx => !!ctx);');
+      w.writeline('if (!choice) throw Error("No Label Context");');
+      w.nl();
+      
+      // build result structure
+      w.write(`return `);
+      w.obj(obj => {
+        obj.write('type', w => w.quote('labels'));
+        obj.write('name', w => w.quote(rulename));
+        obj.write('ctx', 'ctx');
+        obj.write('choice', 'choice');
+        obj.write('children', '[choice]');
+      });
+      w.write(';');
+    });
   });
   
-  const ruleVisitorWriter = new RuleVisitorWriter(parser, cls);
-  const labelVisitorWriter = new LabelVisitorWriter(parser, cls);
-  
-  // add specialized visitors
-  parser.rules.forEach(rule => {
-    // visitor method for this rule
-    ruleVisitorWriter.generate(rule);
-    // special case: visitor method for rule with labeled options
-    if (rule.match.type === '|+') {
-      labelVisitorWriter.generate(rule);
-    }
+  // build visitor for each of this rule's labeled choices
+  choices.forEach(({ label, match }) => {
+    writeVisitRule({ parser, obj, rulename: label, matcher: match });
   });
 }
 
@@ -221,149 +316,6 @@ function generateMatcherNodeType(file: SourceFile, name: string, matcher: Parser
       });
     },
     isExported: true,
-  });
-}
-
-class RuleVisitorWriter {
-  _rule: ParserRule | undefined;
-  
-  constructor(public parser: Parser, public cls: ClassDeclaration) {}
-  
-  generate(rule: ParserRule) {
-    this._rule = rule;
-    
-    this.cls.addMethod({
-      name: visitorName(rule.name),
-      parameters: [{
-        name: 'ctx',
-        type: contextName(rule.name),
-      }],
-      statements: this.write,
-      returnType: astNodeName(rule.name),
-    });
-    
-    return this;
-  }
-  
-  protected write = (writer: CodeBlockWriter) => {
-    const rule = this._rule;
-    if (!rule) throw Error('RuleVisitorWriter has no ParserRule bound');
-    
-    const { match } = rule;
-    const w = new CodeWriter(writer);
-    
-    switch (match.type) {
-      case '|+':
-        this._writeVisitLabels(w, match);
-        break;
-      default:
-        writeVisitMatcher(this.parser, w, rule.name, match);
-        break;
-    }
-  }
-  
-  protected _writeVisitLabels(w: CodeWriter, matcher: MatchAnyLabels) {
-    const { _rule: rule } = this;
-    if (!rule) throw Error('RuleVisitorWriter unbound');
-    
-    const choices = matcher.match;
-    w.write('const opts = [').nl().indent(() => {
-      choices.forEach(({label}) => {
-        const ctxName = contextName(label);
-        w.writeline(`ctx instanceof ${ctxName} && this.${visitorName(label)}(ctx as ${ctxName}),`);
-      });
-    }).writeline('];');
-    
-    w.writeline('if (opts.filter(ctx => !!ctx).length > 1) throw Error("Multiple Label Contexts found");');
-    w.nl();
-    
-    w.writeline('const choice = opts.find(ctx => !!ctx);');
-    w.writeline('if (!choice) throw Error("No Label Context");');
-    w.nl();
-    
-    w.write(`return `);
-    w.obj(obj => {
-      obj.write('type', w => w.quote('labels'));
-      obj.write('name', w => w.quote(rule.name));
-      obj.write('ctx', 'ctx');
-      obj.write('choice', 'choice');
-      obj.write('children', '[choice]');
-    });
-    w.write(';');
-  }
-}
-
-class LabelVisitorWriter {
-  _rule: ParserRule | undefined;
-  
-  constructor(public parser: Parser, public cls: ClassDeclaration) {}
-  
-  generate(rule: ParserRule) {
-    if (rule.match.type !== '|+')
-      throw Error('invalid rule matcher type');
-    this._rule = rule;
-    
-    const choices = rule.match.match;
-    choices.forEach(({ label, match }) => {
-      this.cls.addMethod({
-        name: visitorName(label),
-        parameters: [{
-          name: 'ctx',
-          type: contextName(label),
-        }],
-        statements: this.write(label, match),
-        returnType: astNodeName(label),
-      });
-    });
-    
-    return this;
-  }
-  
-  protected write = (label: string, matcher: ParserMatcher) => (writer: CodeBlockWriter) => {
-    const rule = this._rule;
-    if (!rule) throw Error('LabelVisitorWriter unbound');
-    writeVisitMatcher(this.parser, new CodeWriter(writer), label, matcher);
-  }
-}
-
-function writeVisitMatcher(parser: Parser, writer: CodeWriter, name: string, matcher: ParserMatcher) {
-  const {
-    hasEOF,
-    rules,
-    tokens,
-  } = analyzeRule(matcher);
-  const w = writer;
-  
-  w.write('const rules = ').obj(obj => {
-    rules.forEach(rule => {
-      obj.write(rule, `collect(ctx.getRuleContexts(${contextName(rule)})).map(item => this.${visitorName(rule)}(item))`);
-    })
-  }).writeline(';');
-  
-  w.write('return ');
-  w.obj(obj => {
-    obj.write('type', w => w.quote('rule'));
-    obj.write('name', w => w.quote(name));
-    obj.write('ctx', 'ctx');
-    
-    hasEOF && obj.write('EOF', `collect(ctx.getTokens(${parser.name}.EOF))`);
-    
-    // two reasons for using various `any`:
-    // 1) if children is empty, reduce returns unknown, which cannot be assigned to unknown[]
-    // 2) Object.values(rules) is too strict & needs to be loosened
-    obj.write('children', 'Object.values(rules).reduce((prev, curr) => [...prev as any, ...curr as any], []) as any');
-    
-    if (rules.length) {
-      obj.write('rules', 'rules');
-    }
-    
-    if (tokens.length) {
-      obj.write('tokens', w => w.obj(obj => {
-        tokens.forEach(token => {
-          obj.write(token, `collect(ctx.getTokens(${parser.name}.${token}))`);
-        })
-      }));
-    }
   });
 }
 

@@ -1,7 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { IndentationText, Project, SourceFile, SyntaxKind } from 'ts-morph';
+import { IndentationText, Project, Scope, SourceFile, SyntaxKind } from 'ts-morph';
 import { Parser } from '../langkit';
+import { CodeWriter } from './code-writer';
 import { generateVisitor } from './generate-visitor';
 import { DIR, spawn, SpawnPKM, tplDir } from './utils';
 
@@ -68,59 +69,93 @@ async function generateUtils(project: Project, parser: Parser) {
 /** Generate the concrete Parser with Middleware support from the given Parser definition. */
 async function generateParser(project: Project, parser: Parser) {
   const { lexer } = parser;
-  const fs = project.getFileSystem();
   const ParserIdent = parser.name;
   const LexerIdent = lexer.name;
   
   const rootRule = parser.rules[0];
+  const file = project.createSourceFile(path.join(DIR, 'Parser.ts'), undefined, { overwrite: true });
   
-  fs.copySync(path.join(await tplDir(), 'parser.tpl.ts'), path.join(DIR, 'Parser.ts'));
-  project.addSourceFileAtPath(path.join(DIR, 'Parser.ts'));
-  
-  const file = project.getSourceFile(path.join(DIR, 'Parser.ts'));
-  if (!file) throw Error('Failed to copy Parser template source file');
   file.addImportDeclarations([
     {
+      moduleSpecifier: 'antlr4ts',
+      namedImports: ['CharStreams', 'CommonTokenStream'],
+    },
+    {
       moduleSpecifier: `./antlr/${LexerIdent}`,
-      namedImports: [{ name: LexerIdent }],
+      namedImports: [LexerIdent],
     },
     {
       moduleSpecifier: `./antlr/${ParserIdent}`,
-      namedImports: [{ name: ParserIdent }],
+      namedImports: [ParserIdent],
+    },
+    {
+      moduleSpecifier: './Visitor',
+      namedImports: ['ASTRootNode', 'visit'],
     },
   ]);
   
-  replaceClass(file, 'AntlrLexer', LexerIdent);
-  replaceClass(file, 'AntlrParser', ParserIdent);
+  const cls = file.addClass({
+    name: 'Parser',
+    isExported: true,
+  });
   
-  const cls = file.getClassOrThrow('Parser');
-  const method = cls.getMethodOrThrow('buildAST');
-  const stmt = method.getStatements()[0].asKindOrThrow(SyntaxKind.VariableStatement);
-  const decl = stmt.getDeclarations()[0];
-  decl.set({ initializer: `this._parser['${rootRule.name}']()` });
-}
-
-function replaceClass(file: SourceFile, original: string, replacement: string) {
-  replaceType(file, original, replacement);
-  replaceIdentifier(file, original, replacement);
-}
-
-function replaceIdentifier(file: SourceFile, original: string, replacement: string) {
-  file.getDescendantsOfKind(SyntaxKind.Identifier)
-    .forEach(ident => {
-      if (ident.getText() !== original)
-        return;
-      ident.replaceWithText(replacement);
-    })
-}
-
-function replaceType(file: SourceFile, original: string, replacement: string) {
-  file.getDescendants()
-    .forEach(node => {
-      if (!hasSetType(node) || node.getType().getText() !== original)
-        return;
-      node.setType(replacement);
-    });
+  cls.addConstructor({
+    parameters: [
+      {
+        name: '_lexer',
+        scope: Scope.Public,
+        type: LexerIdent,
+      },
+      {
+        name: '_parser',
+        scope: Scope.Public,
+        type: ParserIdent,
+      },
+    ],
+  });
+  
+  // process()
+  cls.addMethod({
+    name: 'process',
+    statements: writer => {
+      const w = new CodeWriter(writer);
+      w.write(`return visit.${rootRule.name}(this._parser.${rootRule.name}());`);
+    },
+  });
+  
+  // static fromString(source: string): Parser
+  cls.addMethod({
+    name: 'fromString',
+    isStatic: true,
+    parameters: [
+      {
+        name: 'source',
+        type: 'string',
+      },
+    ],
+    returnType: 'Parser',
+    statements: writer => {
+      const w = new CodeWriter(writer);
+      w.writeline(`const lexer = new ${LexerIdent}(CharStreams.fromString(source));`);
+      w.writeline(`const parser = new ${ParserIdent}(new CommonTokenStream(lexer));`);
+      w.writeline(`return new Parser(lexer, parser);`);
+    },
+  });
+  
+  // static parse(source: string): ASTRootNode
+  cls.addMethod({
+    name: 'parse',
+    isStatic: true,
+    parameters: [{
+      name: 'source',
+      type: 'string',
+    }],
+    returnType: 'ASTRootNode',
+    statements: writer => {
+      const w = new CodeWriter(writer);
+      w.writeline(`return Parser.fromString(source).process()`);
+    },
+  });
 }
 
 type HasSetType = { setType(newType: string): void };

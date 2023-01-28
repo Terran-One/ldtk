@@ -25,3 +25,5 @@ export function collect(value: any) {
     return [...value];
   return [value];
 }
+
+export const capitalize = (v: string) => v[0].toUpperCase() + v.substring(1);
