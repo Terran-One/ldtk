@@ -4,6 +4,7 @@ type Writable = string | number | ((writer: CodeWriter) => void);
 type WritableWithIndex = string | number | ((writer: CodeWriter, index: number) => void);
 
 export interface ObjectWriter {
+  writer: CodeWriter;
   lineSep: string;
   write(prop: number | Writable, value: Writable): void;
 }
@@ -59,14 +60,11 @@ export class CodeWriter {
   
   /** Write an object literal */
   obj(cb: (writer: ObjectWriter) => void) {
-    const { writer } = this;
     let linesep = ',', written = false;
-    
-    if (!writer.getLastChar()?.match(/^\s+$/))
-      writer.write(' ');
     
     this.block(() => {
       cb({
+        writer: this,
         write: (prop, value) => {
           written = true;
           
