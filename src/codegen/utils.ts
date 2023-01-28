@@ -80,3 +80,7 @@ export async function fileExists(filepath: string): Promise<FileExistsResult> {
 		return 'no';
 	}
 }
+
+export const contextName = (ruleName: string) => `${capitalize(ruleName)}Context`;
+export const astNodeName = (ruleName: string) => `${capitalize(ruleName)}ASTNode`;
+export const capitalize = (s: string) => s[0].toUpperCase() + s.substring(1);

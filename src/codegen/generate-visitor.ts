@@ -1,8 +1,8 @@
 import { Parser } from 'langkit';
 import { MatchAnyLabels as _MatchAnyLabels, ParserMatcher, ParserMatcherType } from '../langkit/matcher';
 import { ParserRule } from '../langkit/parser';
-import { ClassDeclaration, CodeBlockWriter, Project, SourceFile, VariableDeclarationKind } from 'ts-morph';
-import { DIR } from './utils';
+import { Project, SourceFile, VariableDeclarationKind } from 'ts-morph';
+import { astNodeName, contextName, DIR } from './utils';
 import { CodeWriter, ObjectWriter } from './code-writer';
 
 type MatchAnyLabels = _MatchAnyLabels<ParserMatcherType>;
@@ -318,11 +318,6 @@ function generateMatcherNodeType(file: SourceFile, name: string, matcher: Parser
     isExported: true,
   });
 }
-
-const contextName = (ruleName: string) => `${capitalize(ruleName)}Context`;
-const visitorName = (ruleName: string) => `visit${capitalize(ruleName)}`;
-const astNodeName = (ruleName: string) => `${capitalize(ruleName)}ASTNode`;
-const capitalize = (s: string) => s[0].toUpperCase() + s.substring(1);
 
 function analyzeRule(root: ParserMatcher) {
   const leafs = [...getRuleLeafs(root)];
