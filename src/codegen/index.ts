@@ -4,7 +4,7 @@ import { IndentationText, Project } from 'ts-morph';
 import { Parser } from '../langkit';
 import { generateParser } from './generate-parser';
 import { generateVisitor } from './generate-visitor';
-import { DIR, spawn, SpawnPKM, tplDir } from './utils';
+import { astNodeName, contextName, DIR, spawn, SpawnPKM, tplDir } from './utils';
 
 export type GenerateOptions = {
   /** Package manager to use in order to invoke antlr4ts. Determined based on presence of package-lock.json or yarn.lock
@@ -63,5 +63,17 @@ async function generateUtils(project: Project, parser: Parser) {
   const srcPath = `${await tplDir()}/utils.tpl.ts`;
   const destPath = `${DIR}/utils.ts`;
   await fs.copy(srcPath, destPath);
-  project.addSourceFileAtPath(destPath);
+  const file = project.addSourceFileAtPath(destPath);
+  
+  const rootRule = parser.rules[0];
+  
+  file.addImportDeclaration({
+    moduleSpecifier: `./antlr/${parser.name}`,
+    namedImports: [contextName(rootRule.name)],
+  });
+  
+  const entryType = file.getTypeAliasOrThrow('VisitorEntry');
+  entryType.set({
+    type: `{${rootRule.name}: (ctx: ${contextName(rootRule.name)}) => any}`,
+  });
 }

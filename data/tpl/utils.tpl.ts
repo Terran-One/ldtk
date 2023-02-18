@@ -1,29 +1,34 @@
+// DO NOT CHANGE THIS FILE, IT IS AUTOMATICALLY GENERATED
+import { TerminalNode } from 'antlr4ts/tree/TerminalNode';
 
-/** Collect values into an array.
- * 
- * This specialization simply returns the original array `value`.
- */
-export function collect<T>(value: T[]): T[];
-/** Collect values into an array.
- * 
- * This specialization wraps the given string in a 1-element array.
- */
-export function collect(value: string): string[];
-/** Collect values into an array. */
-export function collect<T>(value: Iterable<T>): T[];
-/** Collect values into an array.
- * 
- * This specialization wraps the given value in a 1-element array.
- */
-export function collect<T>(value: T): T[];
-export function collect(value: any) {
-  if (Array.isArray(value))
-    return value;
-  if (typeof value === 'string')
-    return [value];
-  if (Symbol.iterator in value)
-    return [...value];
-  return [value];
+export type VisitorEntry = { entry: (ctx: any) => any };
+export type VisitorMap = Record<string, any>;
+export type VisitHandler<M extends VisitorMap> = {
+  [v in keyof M]: (ctx: any) => M[v];
 }
 
-export const capitalize = (v: string) => v[0].toUpperCase() + v.substring(1);
+export type RuleASTNode<V extends VisitorMap, Name extends keyof V, Ctx, Rules extends (keyof V)[], Tokens extends string[]> =
+  & {
+      type: Name;
+      family: 'rule';
+      ctx: Ctx;
+      children: V[Rules[number]][];
+    }
+  & (
+    Rules extends []
+    ? {} : {rules: {[rule in Rules[number]]: V[rule][]}}
+  )
+  & (
+    Tokens extends []
+    ? {} : {tokens: {[token in Tokens[number]]: TerminalNode[]}}
+  )
+
+export type LabelASTNode<V extends VisitorMap, Name extends keyof V, Ctx, Choices extends (keyof V)[]> = {
+  type: Name;
+  family: 'labels';
+  ctx: Ctx;
+  choice: V[Choices[number]];
+  children: [V[Choices[number]]];
+}
+
+export type WithEOF = { EOF?: TerminalNode };

@@ -6,8 +6,12 @@ const parser = Parser.create('ToyParser', lexer, $ => {
   const { expr, exprx } = r;
   const { COMMA, LPAREN, RPAREN, LBRACE, RBRACE, LBRACK, RBRACK, NL, Ident } = T;
   return {
-    program: $($(NL.star, r.imports.star, NL.star), $(r.root, $.or($.or(NL, T.SEMIC).plus, EOF)).star, EOF),
-    imports: $(T.IMPORT, r.stringLiteral, $.or(T.SEMIC, NL)),
+    program: $(
+      r.cmdsep.star,
+      $(r.import_, $.or(r.cmdsep.plus, EOF)).star,
+      $(r.root, $.or(r.cmdsep.plus, EOF)).star,
+      EOF,
+    ),
     
     // $.options is a special $.or which may only appear on the root level of a rule.
     // Its keys are the labels for the options under which they will be available
@@ -17,6 +21,8 @@ const parser = Parser.create('ToyParser', lexer, $ => {
       ExprxRoot: exprx,
       FnCallNakedRoot: r.fnCallNaked,
     }),
+    import_: $(T.IMPORT, r.stringLiteral),
+    cmdsep: $.or(NL, T.SEMIC),
     
     expr: $.options({
       GroupExpr:          $(LPAREN, expr, RPAREN),
