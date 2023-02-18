@@ -16,8 +16,11 @@ interface LexerRule {
   fragment: boolean;
   skip: boolean;
   channel: string | undefined;
+  mode: string | undefined;
   pushMode: string | undefined;
   popMode: boolean;
+  more: boolean;
+  type: string | undefined;
   
   /** Produce a string representation of this rule. */
   toAntlr(): string;
@@ -31,9 +34,31 @@ export default class Lexer implements LexerMode {
   ) {}
   
   toAntlr(): string {
-    return `lexer grammar ${this.name};\n\n` +
-      this.rules.map(r => r.toAntlr()).join('\n') + '\n\n' +
-      this.modes.map(m => m.toAntlr()).join('\n\n') + '\n';
+    const channels = [
+      this._collectChannels(this.rules),
+      ...this.modes.map(mode => this._collectChannels(mode.rules)),
+    ].reduce((prev, curr) => prev.concat(curr), []).sort();
+    
+    let result = `lexer grammar ${this.name};\n\n`;
+    
+    if (channels.length) {
+      result += 'channels {\n'
+        + channels.map(c => `\t${c}`).join(',\n')
+        + '}\n\n';
+    }
+    
+    result += this.rules.map(r => r.toAntlr()).join('\n') + '\n\n';
+    result += this.modes.map(m => m.toAntlr()).join('\n\n') + '\n';
+    
+    return result;
+  }
+  
+  protected _collectChannels(rules: LexerRule[]): string[] {
+    const result: string[] = [];
+    for (const rule of rules) {
+      rule.channel && result.push(rule.channel);
+    }
+    return result;
   }
   
   static create(name: string, rules: LexerDef): LexerBuilder {
@@ -97,27 +122,25 @@ class LexerRuleBuilder {
   _fragment = false;
   _skipped = false;
   _channel: string | undefined;
+  _mode: string | undefined;
   _pushMode: string | undefined;
   _popMode = false;
+  _more = false;
+  _type: string | undefined;
   
   constructor(
-    public _mode: string | undefined,
+    public _activeMode: string | undefined,
     public _match: LexerMatcher,
   ) {}
-  
-  fragment() {
-    this._fragment = true;
-    return this;
-  }
-  
-  skip() {
-    this._skipped = true;
-    return this;
-  }
   
   channel(name: string) {
     if (this._channel !== undefined) throw Error(`Channel already set to ${this._channel}`);
     this._channel = name;
+    return this;
+  }
+  
+  mode(mode: string) {
+    this._mode = mode;
     return this;
   }
   
@@ -127,7 +150,7 @@ class LexerRuleBuilder {
     return this;
   }
   
-  popMode() {
+  get popMode() {
     if (this._mode === undefined) throw Error('Can only popMode from rules within modes');
     this._popMode = true;
     return this;
@@ -140,8 +163,11 @@ class LexerRuleBuilder {
       fragment: this._fragment,
       skip: this._skipped,
       channel: this._channel,
+      mode: this._mode,
       pushMode: this._pushMode,
       popMode: this._popMode,
+      more: this._more,
+      type: this._type,
       
       toAntlr() {
         let s = '';
@@ -154,14 +180,17 @@ class LexerRuleBuilder {
         s += this.match.toAntlr();
         
         // rule parameters
-        const { skip, channel, pushMode, popMode } = this;
-        if (skip || channel || pushMode || popMode) {
+        const { skip, channel, mode, pushMode, popMode, more, type } = this;
+        if (skip || channel || mode || pushMode || popMode || more || type) {
           s += ' -> ';
           s += [
             skip && 'skip',
             channel && `channel(${channel})`,
+            mode && `mode(${mode})`,
             pushMode && `pushMode(${pushMode})`,
             popMode && 'popMode',
+            more && 'more',
+            type && `type(${type})`,
           ].filter(flag => !!flag).join(', ');
         }
         
@@ -169,6 +198,26 @@ class LexerRuleBuilder {
         return s;
       },
     }
+  }
+  
+  type(value: string) {
+    this._type = value;
+    return this;
+  }
+  
+  get fragment() {
+    this._fragment = true;
+    return this;
+  }
+  
+  get skip() {
+    this._skipped = true;
+    return this;
+  }
+  
+  get more() {
+    this._more = true;
+    return this;
   }
   
   static from(elem: MatchElement | LexerRuleBuilder, mode?: string): LexerRuleBuilder {
@@ -220,7 +269,7 @@ function createAPI(mode?: string) {
     return result;
   }
   
-  /** Negate given matches. Anything matches but these. */
+  /** Match any single character that is not in the given range. */
   api.not = (...match: MatchElement[]): MatchNot<LexerMatcherType> => {
     const result = common({
       type: '~' as const,
@@ -235,7 +284,7 @@ function createAPI(mode?: string) {
   /** Explicitly wrap given matches in a `LexerRuleBuilder` which exposes additional rule-level operations. */
   api.rule = (...match: MatchElement[]) => new LexerRuleBuilder(mode, api(...match));
   /** Explicitly wrap given matches in a fragment rule. Shorthand for `api.rule(...).fragment()`. */
-  api.frag = (...match: MatchElement[]) => api.rule(...match).fragment();
+  api.frag = (...match: MatchElement[]) => api.rule(...match).fragment;
   
   /** Match any single character */
   api.any = ((): MatchAnyChar<LexerMatcherType> => {
