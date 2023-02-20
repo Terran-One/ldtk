@@ -13,14 +13,18 @@ interface LexerRule {
   name: string;
   match: LexerMatcher;
   
-  fragment: boolean;
-  skip: boolean;
-  channel: string | undefined;
-  mode: string | undefined;
-  pushMode: string | undefined;
-  popMode: boolean;
-  more: boolean;
-  type: string | undefined;
+  meta: {
+    fragment: boolean;
+    skip: boolean;
+    channel: string | undefined;
+    mode: string | undefined;
+    pushMode: string | undefined;
+    popMode: boolean;
+    more: boolean;
+    type: string | undefined;
+    action: LexerAction | undefined;
+    predicate: LexerPredicate | undefined;
+  };
   
   /** Produce a string representation of this rule. */
   toAntlr(): string;
@@ -56,7 +60,7 @@ export default class Lexer implements LexerMode {
   protected _collectChannels(rules: LexerRule[]): string[] {
     const result: string[] = [];
     for (const rule of rules) {
-      rule.channel && result.push(rule.channel);
+      rule.meta.channel && result.push(rule.meta.channel);
     }
     return result;
   }
@@ -119,40 +123,58 @@ class LexerBuilder {
 }
 
 class LexerRuleBuilder {
-  _fragment = false;
-  _skipped = false;
-  _channel: string | undefined;
-  _mode: string | undefined;
-  _pushMode: string | undefined;
-  _popMode = false;
-  _more = false;
-  _type: string | undefined;
+  meta: LexerRule['meta'] = {
+    fragment: false,
+    skip: false,
+    channel: undefined,
+    mode: undefined,
+    pushMode: undefined,
+    popMode: false,
+    more: false,
+    type: undefined,
+    action: undefined,
+    predicate: undefined,
+  };
   
   constructor(
-    public _activeMode: string | undefined,
+    public _mode: string | undefined,
     public _match: LexerMatcher,
   ) {}
   
   channel(name: string) {
-    if (this._channel !== undefined) throw Error(`Channel already set to ${this._channel}`);
-    this._channel = name;
+    if (this.meta.channel !== undefined) throw Error(`Channel already set to ${this.meta.channel}`);
+    this.meta.channel = name;
     return this;
   }
   
   mode(mode: string) {
-    this._mode = mode;
+    this.meta.mode = mode;
     return this;
   }
   
   pushMode(mode: string) {
-    if (this._pushMode !== undefined) throw Error(`pushMode already set to ${this._mode}`);
-    this._pushMode = mode;
+    if (this.meta.pushMode !== undefined) throw Error(`pushMode already set to ${this._mode}`);
+    this.meta.pushMode = mode;
     return this;
   }
   
   get popMode() {
-    if (this._mode === undefined) throw Error('Can only popMode from rules within modes');
-    this._popMode = true;
+    this.meta.popMode = true;
+    return this;
+  }
+  
+  type(value: string) {
+    this.meta.type = value;
+    return this;
+  }
+  
+  exec(action: LexerAction) {
+    this.meta.action = action;
+    return this;
+  }
+  
+  where(pred: LexerPredicate) {
+    this.meta.predicate = pred;
     return this;
   }
   
@@ -160,27 +182,29 @@ class LexerRuleBuilder {
     return {
       name,
       match: this._match,
-      fragment: this._fragment,
-      skip: this._skipped,
-      channel: this._channel,
-      mode: this._mode,
-      pushMode: this._pushMode,
-      popMode: this._popMode,
-      more: this._more,
-      type: this._type,
+      meta: this.meta,
       
       toAntlr() {
         let s = '';
         
+        const { action, predicate: pred } = this.meta;
+        
         // rule name + fragment
-        if (this.fragment) s += 'fragment ';
+        if (this.meta.fragment) s += 'fragment ';
         s += `${this.name}: `;
         
+        // rule semantic predicate
+        if (pred) s += '{(' + pred + ')(this.state)}?';
+        
+        // for the sake of simplicity, actions are always applied to the whole rule
+        // which is what ANTLR recommends anyways
+        // hence when an action is given we wrap the entire matcher in (...)
+        if (action) s += '(';
         // matchers
         s += this.match.toAntlr();
         
         // rule parameters
-        const { skip, channel, mode, pushMode, popMode, more, type } = this;
+        const { skip, channel, mode, pushMode, popMode, more, type } = this.meta;
         if (skip || channel || mode || pushMode || popMode || more || type) {
           s += ' -> ';
           s += [
@@ -194,29 +218,27 @@ class LexerRuleBuilder {
           ].filter(flag => !!flag).join(', ');
         }
         
+        // rule action
+        if (action) s += ') {(' + action + ')(this.state)}';
+        
         s += ';'
         return s;
       },
     }
   }
   
-  type(value: string) {
-    this._type = value;
-    return this;
-  }
-  
   get fragment() {
-    this._fragment = true;
+    this.meta.fragment = true;
     return this;
   }
   
   get skip() {
-    this._skipped = true;
+    this.meta.skip = true;
     return this;
   }
   
   get more() {
-    this._more = true;
+    this.meta.more = true;
     return this;
   }
   
@@ -228,6 +250,9 @@ class LexerRuleBuilder {
     );
   }
 }
+
+type LexerAction = (this: any, state: any) => void;
+type LexerPredicate = (this: any, state: any) => boolean;
 
 type LexerDef = LexerRuleMap | ((api: LexerAPI) => LexerRuleMap);
 
