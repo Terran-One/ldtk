@@ -1,5 +1,14 @@
 import { mergeRules } from "./common";
-import { createMatcher, LexerMatcher, LexerMatcherType, MatchAll, MatchAny, MatchAnyChar, MatchLiteral, MatchNot, MatchRange, MatchToken, MatchTokenFactory } from "./matcher";
+import {
+  createMatcher,
+  LexerMatcher,
+  LexerMatcherType,
+  LexerMatchExtra,
+  LexerMatchMap as Matchers,
+  matchAll,
+  MatchTokenFactory,
+  ProcessMatchElements,
+} from "./matcher";
 
 interface LexerMode {
   name: string;
@@ -256,14 +265,14 @@ type LexerPredicate = (this: any, state: any) => boolean;
 
 type LexerDef = LexerRuleMap | ((api: LexerAPI) => LexerRuleMap);
 
-const common = <T extends object>(obj: T) => createMatcher.pin<LexerMatcherType>()(obj);
+const common = <T extends object>(obj: T) => createMatcher.pin(parseMatchElements)(obj);
 type LexerAPI = ReturnType<typeof createAPI>;
 
 function createAPI(mode?: string) {
-  function api(match: string): MatchLiteral<LexerMatcherType>;
-  function api(match: string[]): MatchRange<LexerMatcherType>;
+  function api(match: string): Matchers['literal'];
+  function api(match: string[]): Matchers['[]'];
   function api(match: MatchElement): LexerMatcher;
-  function api(...matches: MatchElement[]): MatchAll<LexerMatcherType>;
+  function api(...matches: MatchElement[]): Matchers['&'];
   function api(...matches: MatchElement[]): any {
     if (matches.length === 0) throw Error('No matches provided');
     if (matches.length === 1) return parseMatchElements(matches)[0];
@@ -271,19 +280,10 @@ function createAPI(mode?: string) {
   }
   
   /** A sequence of matches. All of these must match in sequence. */
-  api.seq = (...match: MatchElement[]): MatchAll<LexerMatcherType> => {
-    const result = common({
-      type: '&' as const,
-      match: parseMatchElements(match),
-      toAntlr() {
-        return '(' + this.match.map(m => m.toAntlr()).join(' ') + ')';
-      },
-    })
-    return result;
-  }
+  api.seq = (...match: MatchElement[]) => matchAll(parseMatchElements, ...match);
   
   /** A selection of alternative choices. Any one of these must match in parallel. */
-  api.or = (...match: MatchElement[]): MatchAny<LexerMatcherType> => {
+  api.or = (...match: MatchElement[]): Matchers['|'] => {
     const result = common({
       type: '|' as const,
       match: parseMatchElements(match),
@@ -295,7 +295,7 @@ function createAPI(mode?: string) {
   }
   
   /** Match any single character that is not in the given range. */
-  api.not = (...match: MatchElement[]): MatchNot<LexerMatcherType> => {
+  api.not = (...match: MatchElement[]): Matchers['~'] => {
     const result = common({
       type: '~' as const,
       match: api(...match),
@@ -312,7 +312,7 @@ function createAPI(mode?: string) {
   api.frag = (...match: MatchElement[]) => api.rule(...match).fragment;
   
   /** Match any single character */
-  api.any = ((): MatchAnyChar<LexerMatcherType> => {
+  api.any = ((): Matchers['.'] => {
     const result = common({
       type: '.' as const,
       toAntlr() { return '.' },
@@ -321,7 +321,7 @@ function createAPI(mode?: string) {
   })();
   
   /** Match any one named token. Token name must be capitalized. Combine with other matchers. */
-  api.T = MatchTokenFactory<LexerMatcherType>('token');
+  api.T = MatchTokenFactory(parseMatchElements, 'token');
   
   /** Create an unescaped string literal. Ideal for matching sequences like '\n' or '\t'.
    * 
@@ -345,12 +345,13 @@ type LexerRuleMap = Record<string, MatchElement | LexerRuleBuilder>;
 type LexerModeMap = Record<string, LexerRuleMap>;
 
 type MatchElement = string | string[] | LexerMatcher;
-type MatchTokenFactory = Record<string, MatchToken<LexerMatcherType>>;
+type MatchTokenFactory = Record<string, Matchers['token']>;
 
-const parseMatchElements = (matches: MatchElement[]) => matches.map(parseMatchElement);
+const parseMatchElements: ProcessMatchElements<LexerMatchExtra, LexerMatcherType> =
+  matches => matches.map(parseMatchElement);
 
-function parseMatchElement(match: string): MatchLiteral<LexerMatcherType>;
-function parseMatchElement(match: string[]): MatchRange<LexerMatcherType>;
+function parseMatchElement(match: string): Matchers['literal'];
+function parseMatchElement(match: string[]): Matchers['[]'];
 function parseMatchElement<T extends LexerMatcher>(match: T): T;
 function parseMatchElement(match: MatchElement): LexerMatcher;
 function parseMatchElement(match: MatchElement) {

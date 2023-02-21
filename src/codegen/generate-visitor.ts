@@ -1,10 +1,10 @@
-import { MatchAnyLabels as _MatchAnyLabels, ParserMatcher, ParserMatcherType } from '../langkit/matcher';
+import { MatchAnyLabels as _MatchAnyLabels, ParserMatcher, ParserMatcherType, ParserMatchExtra } from '../langkit/matcher';
 import Parser, { ParserRule } from '../langkit/parser';
 import { Project, SourceFile, VariableDeclarationKind } from 'ts-morph';
 import { astNodeName, contextName, DIR } from './utils';
 import { CodeWriter, ObjectWriter } from './code-writer';
 
-type MatchAnyLabels = _MatchAnyLabels<ParserMatcherType>;
+type MatchAnyLabels = _MatchAnyLabels<ParserMatchExtra, ParserMatcherType>;
 
 /** Generate an Antlr-specific visitor from the given Parser definition. */
 export async function generateVisitor(project: Project, parser: Parser) {

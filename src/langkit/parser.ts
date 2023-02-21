@@ -2,19 +2,17 @@ import { mergeRules } from "./common";
 import Lexer from "./lexer";
 import {
   createMatcher,
-  MatchAlias,
-  MatchAll,
-  MatchAny,
   MatchAnyLabels as _MatchAnyLabels,
-  MatchEOF,
-  MatchNot,
-  MatchToken,
   MatchTokenFactory,
   ParserMatcher,
   ParserMatcherType,
+  ParserMatchMap as Matchers,
+  ParserMatchExtra,
+  ProcessMatchElements,
+  matchAll,
 } from "./matcher";
 
-type MatchAnyLabels = _MatchAnyLabels<ParserMatcherType>;
+type MatchAnyLabels = _MatchAnyLabels<ParserMatchExtra, ParserMatcherType>;
 
 export type ParserRule =
   | { // Pretty much all matchers but labeled options
@@ -121,32 +119,40 @@ class ParserRuleOption {
 
 type ParserDef = ParserRuleMap | ((api: ParserAPI) => ParserRuleMap);
 
-const common = <T extends object>(obj: T) => createMatcher.pin<ParserMatcherType>()(obj);
+const common = <T extends object>(obj: T) => createMatcher.pin(parseMatchElements)(obj);
 type ParserAPI = ReturnType<typeof createAPI>;
+type ParserAPIConfig = {
+  /** The NL token the parser will use with convenience methods. */
+  NL: Matchers['token'];
+}
 
 function createAPI(mode?: string) {
+  let config: ParserAPIConfig = {
+    NL: undefined as any,
+  };
+  
   function api(match: MatchElement): ParserMatcher;
-  function api(...matches: MatchElement[]): MatchAll<ParserMatcherType>;
+  function api(...matches: MatchElement[]): Matchers['&'];
   function api(...matches: MatchElement[]): any {
     if (matches.length === 0) throw Error('No matches provided');
     if (matches.length === 1) return parseMatchElements(matches)[0];
     return api.seq(...matches);
   }
   
-  /** A sequence of matches. All of these must match in sequence. */
-  api.seq = (...match: MatchElement[]): MatchAll<ParserMatcherType> => {
-    const result = common({
-      type: '&' as const,
-      match: parseMatchElements(match),
-      toAntlr() {
-        return this.match.map(m => m.toAntlr()).join(' ');
-      },
-    })
-    return result;
+  /** Configure various behaviors of this parser API instance. */
+  api.config = (cfg: Partial<ParserAPIConfig>) => {
+    config = {
+      ...config,
+      ...cfg,
+    };
+    return api;
   }
   
+  /** A sequence of matches. All of these must match in sequence. */
+  api.seq = (...match: MatchElement[]) => matchAll(parseMatchElements, ...match);
+  
   /** A selection of alternative choices. Any one of these must match in parallel. */
-  api.or = (...match: MatchElement[]): MatchAny<ParserMatcherType> => {
+  api.or = (...match: MatchElement[]): Matchers['|'] => {
     const result = common({
       type: '|' as const,
       match: parseMatchElements(match),
@@ -158,7 +164,7 @@ function createAPI(mode?: string) {
   }
   
   /** Rename a given matcher with the given `name`. If the name ends on `[]`, it'll collect all values assigned to the same alias. */
-  api.alias = (name: string, ...match: MatchToken<ParserMatcherType>[]): MatchAlias<ParserMatcherType> => {
+  api.alias = (name: string, ...match: Matchers['token'][]): Matchers['alias'] => {
     if (!match.length) throw Error('Alias needs at least one matcher');
     const result = common({
       type: 'alias' as const,
@@ -229,7 +235,7 @@ function createAPI(mode?: string) {
   }
   
   /** Negate given matches. Anything matches but these. */
-  api.not = (...match: MatchElement[]): MatchNot<ParserMatcherType> => {
+  api.not = (...match: MatchElement[]): Matchers['~'] => {
     const result = common({
       type: '~' as const,
       match: api(...match),
@@ -243,13 +249,25 @@ function createAPI(mode?: string) {
   /** Explicitly wrap given matches in a `ParserRuleBuilder` which exposes additional rule-level operations. */
   api.rule = (...match: MatchElement[]) => new ParserRuleBuilder(mode, api(...match));
   
+  /** Match one or more occurrences of `repeat`, with a `join` inbetween each `repeat`.
+   * 
+   * If `multiline` is true, inserts `NL` tokens around each `join`. The nl token can be configured
+   * with `$.config({ NL: ... })`.
+   */
+  api.many = (repeat: MatchElement, join: MatchElement, multiline = false) => {
+    if (!multiline)
+      return api(repeat, api(join, repeat).star);
+    const { NL } = config;
+    return api(repeat, api(NL.star, join, NL.star, repeat).star);
+  }
+  
   /** Match any one named token. Token name must be capitalized. Combine with other matchers. */
-  api.T = MatchTokenFactory<ParserMatcherType>('token');
+  api.T = MatchTokenFactory(parseMatchElements, 'token');
   /** match any one named rule. Rule name must be lowercase. Combine with other matchers. */
-  api.r = MatchTokenFactory<ParserMatcherType>('rule');
+  api.r = MatchTokenFactory(parseMatchElements, 'rule');
   
   /** Match the End of File */
-  api.EOF = ((): MatchEOF<ParserMatcherType> => {
+  api.EOF = ((): Matchers['EOF'] => {
     const result = common({
       type: 'EOF' as const,
       toAntlr() { return 'EOF' },
@@ -257,15 +275,17 @@ function createAPI(mode?: string) {
     return result;
   })();
   
+  config.NL = api.T.NL;
   return api;
 }
 
 type ParserRuleMap = Record<string, MatchElement | MatchAnyLabels | ParserRuleBuilder>;
 
 type MatchElement = ParserMatcher;
-type MatchTokenFactory = Record<string, MatchToken<ParserMatcherType>>;
+type MatchTokenFactory = Record<string, Matchers['token']>;
 
-const parseMatchElements = (matches: MatchElement[]) => matches.map(el => parseMatchElement(el));
+const parseMatchElements: ProcessMatchElements<ParserMatchExtra, ParserMatcherType> =
+  matches => matches.map(el => parseMatchElement(el));
 
 function parseMatchElement<T extends ParserMatcher>(match: T): T;
 function parseMatchElement(match: MatchAnyLabels): MatchAnyLabels;

@@ -4,8 +4,8 @@ const lexer = Lexer.create('ToyLexer', $ => {
   const { T, l } = $;
   
   return {
-    BlockCommentSlash: $.rule(`/*`).skip().pushMode('BLOCK_COMMENT_SLASH'),
-    BlockCommentPound: $.rule('###', $.any.plus.lazy, '###').skip(),
+    BlockCommentSlash: $.rule(`/*`).skip.pushMode('BLOCK_COMMENT_SLASH'),
+    BlockCommentPound: $.rule('###', $.any.plus.lazy, '###').skip,
     
     IMPORT: 'import',
     IF: 'if',
@@ -59,12 +59,12 @@ const lexer = Lexer.create('ToyLexer', $ => {
     ),
     Ident: $(['A-Za-z_'], $(['A-Za-z_0-9']).star),
     
-    Comment: $.rule($.or('#', '//'), $.not([l`\r\n`]).star, [l`\r\n`]).skip(),
+    Comment: $.rule($.or('#', '//'), $.not([l`\r\n`]).star, [l`\r\n`]).skip,
     DOTS3: '...',
     DOTS2: '..',
     DOT: '.',
     
-    WS: $.rule($([l` \t`]).plus).skip(),
+    WS: $.rule($([l` \t`]).plus).skip,
     NL: $([l`\r\n`]).plus,
     POUND: '#',
     
@@ -73,19 +73,19 @@ const lexer = Lexer.create('ToyLexer', $ => {
   }
 })
 .mode('BLOCK_COMMENT_SLASH', $ => ({
-  BlockCommentEscape: $.rule('\\', $.any).skip(),
-  BlockCommentNest: $.rule('/*').skip().pushMode('BLOCK_COMMENT_SLASH'),
-  BlockCommentEnd: $.rule('*/').skip().popMode(),
-  BlockCommentContent: $.rule($.any.plus.lazy).skip(),
+  BlockCommentEscape: $.rule('\\', $.any).skip,
+  BlockCommentNest: $.rule('/*').skip.pushMode('BLOCK_COMMENT_SLASH'),
+  BlockCommentEnd: $.rule('*/').skip.popMode,
+  BlockCommentContent: $.rule($.any.plus.lazy).skip,
 }))
 .mode('STRING1', $ => ({
   String1Escape: $('\\', $.any),
-  String1End: $.rule("'").popMode(),
+  String1End: $.rule("'").popMode,
   String1Content: $($.any.plus.lazy),
 }))
 .mode('STRING2', $ => ({
   String2Escape: $('\\', $.any),
-  String2End: $.rule('"').popMode(),
+  String2End: $.rule('"').popMode,
   String2Content: $($.any.plus.lazy),
 }))
 .build()

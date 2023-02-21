@@ -82,12 +82,12 @@ const parser = Parser.create('ToyParser', lexer, $ => {
       $(T.ELSE, $.alias('falseBranch', exprx)).optional,
     ),
     
-    fnArg: $($.alias('name', Ident), $(T.ASSIGN, $.alias('defaultValue', exprx)).optional),
-    fnArgs: $(NL.star, $.or(
+    fnArg: $(Ident, $(T.ASSIGN, exprx).optional),
+    fnArgs: $.or(
       $(r.posArgs, $(COMMA, NL.star, r.varArgs).optional),
       r.varArgs,
-    ), NL.star),
-    posArgs: $($.alias('args[]', r.fnArg), $(NL.star, COMMA, NL.star, $.alias('args[]', r.fnArg)).star),
+    ).wrap(NL.star),
+    posArgs: $.many(r.fnArg, COMMA, true),
     varArgs: $(Ident, T.DOTS3),
     
     fnDef: $(
