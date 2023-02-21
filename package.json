@@ -14,13 +14,8 @@
 	"typescript": "^4.9.3"
   },
   "scripts": {
-	"build": "tsc --module commonjs && webpack --mode production",
-	"build:types": "tsc --declaration --emitDeclarationOnly",
-	"antlr-lexer-basic": "#antlr4ts ./grammar/LexBasic.g4 -o ./src",
-	"antlr-lexer": "#antlr4ts ./grammar/ANTLRv4Lexer.g4 -o ./src",
-	"antlr-parser": "#antlr4ts -visitor ./grammar/ANTLRv4Parser.g4 -o ./src -lib ./src/grammar",
-	"antlr": "npm run antlr-lexer-basic && npm run antlr-lexer && npm run antlr-parser",
-	"test": "ts-node sample/grammar/CWScript.grammar.ts"
+	"build": "tsc",
+	"build:types": "tsc --declaration --emitDeclarationOnly"
   },
   "prettier": {
 	"printWidth": 80,
