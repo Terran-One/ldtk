@@ -209,8 +209,12 @@ class LexerRuleBuilder {
         // which is what ANTLR recommends anyways
         // hence when an action is given we wrap the entire matcher in (...)
         if (action) s += '(';
+        
         // matchers
         s += this.match.toAntlr();
+        
+        // rule action
+        if (action) s += ') {(' + action + ')(this.state)}';
         
         // rule parameters
         const { skip, channel, mode, pushMode, popMode, more, type } = this.meta;
@@ -226,9 +230,6 @@ class LexerRuleBuilder {
             type && `type(${type})`,
           ].filter(flag => !!flag).join(', ');
         }
-        
-        // rule action
-        if (action) s += ') {(' + action + ')(this.state)}';
         
         s += ';'
         return s;
