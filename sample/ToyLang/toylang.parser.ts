@@ -69,10 +69,7 @@ const parser = Parser.create('ToyParser', lexer, $ => {
       $(LPAREN, $(expr, $(COMMA, expr).plus).optional, RPAREN), // (value0, value1, ...)
       $(LPAREN, $(expr, COMMA), RPAREN), // (value0,)
     ),
-    stringLiteral: $.or(
-      $(T.String1, $.alias('value', T.String1Content, T.String1Escape).star, T.String1End), // '...' string
-      $(T.String2, $.alias('value', T.String2Content, T.String2Escape).star, T.String2End), // "..." string
-    ),
+    stringLiteral: T.String,
     symbolLiteral: $(T.COLON, Ident),
     
     if_: $(

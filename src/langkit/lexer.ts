@@ -50,14 +50,14 @@ export default class Lexer implements LexerMode {
     const channels = [
       this._collectChannels(this.rules),
       ...this.modes.map(mode => this._collectChannels(mode.rules)),
-    ].reduce((prev, curr) => prev.concat(curr), []).sort();
+    ].reduce((prev, curr) => prev.concat([...curr]), [] as string[]).sort();
     
     let result = `lexer grammar ${this.name};\n\n`;
     
     if (channels.length) {
       result += 'channels {\n'
         + channels.map(c => `\t${c}`).join(',\n')
-        + '}\n\n';
+        + '\n}\n\n';
     }
     
     result += this.rules.map(r => r.toAntlr()).join('\n') + '\n\n';
@@ -66,10 +66,10 @@ export default class Lexer implements LexerMode {
     return result;
   }
   
-  protected _collectChannels(rules: LexerRule[]): string[] {
-    const result: string[] = [];
+  protected _collectChannels(rules: LexerRule[]): Set<string> {
+    const result = new Set<string>();
     for (const rule of rules) {
-      rule.meta.channel && result.push(rule.meta.channel);
+      rule.meta.channel && result.add(rule.meta.channel);
     }
     return result;
   }

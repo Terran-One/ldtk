@@ -4,8 +4,8 @@ const lexer = Lexer.create('ToyLexer', $ => {
   const { T, l } = $;
   
   return {
-    BlockCommentSlash: $.rule(`/*`).skip.pushMode('BLOCK_COMMENT_SLASH'),
-    BlockCommentPound: $.rule('###', $.any.plus.lazy, '###').skip,
+    CommentBlockSlash: $.rule('/*', $.or(T.CommentBlockSlash, $.any).star.lazy, '*/').channel('comment'),
+    CommentBlockPound: $.rule('###', $.any.plus.lazy, '###').channel('comment'),
     
     IMPORT: 'import',
     IF: 'if',
@@ -68,26 +68,13 @@ const lexer = Lexer.create('ToyLexer', $ => {
     NL: $([l`\r\n`]).plus,
     POUND: '#',
     
-    String1: $.rule("'").pushMode('STRING1'),
-    String2: $.rule('"').pushMode('STRING2'),
+    String: $.or(
+      $("'", $.or(T.EscapeSequence, $.any).star, "'"),
+      $('"', $.or(T.EscapeSequence, $.any).star, '"'),
+    ),
+    EscapeSequence: $('\\', $.any),
   }
 })
-.mode('BLOCK_COMMENT_SLASH', $ => ({
-  BlockCommentEscape: $.rule('\\', $.any).skip,
-  BlockCommentNest: $.rule('/*').skip.pushMode('BLOCK_COMMENT_SLASH'),
-  BlockCommentEnd: $.rule('*/').skip.popMode,
-  BlockCommentContent: $.rule($.any.plus.lazy).skip,
-}))
-.mode('STRING1', $ => ({
-  String1Escape: $('\\', $.any),
-  String1End: $.rule("'").popMode,
-  String1Content: $($.any.plus.lazy),
-}))
-.mode('STRING2', $ => ({
-  String2Escape: $('\\', $.any),
-  String2End: $.rule('"').popMode,
-  String2Content: $($.any.plus.lazy),
-}))
 .build()
 
 export default lexer;
