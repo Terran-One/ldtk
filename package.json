@@ -2,7 +2,7 @@
   "name": "@terran-one/ldtk",
   "version": "0.1.0",
   "description": "Tools for creating languages in TypeScript",
-  "main": "index.js",
+  "main": "src/index.ts",
   "author": "Terran One",
   "license": "MIT",
   "devDependencies": {
