@@ -1,6 +1,5 @@
-import { Parser } from 'langkit';
 import { MatchAnyLabels as _MatchAnyLabels, ParserMatcher, ParserMatcherType } from '../langkit/matcher';
-import { ParserRule } from '../langkit/parser';
+import Parser, { ParserRule } from '../langkit/parser';
 import { Project, SourceFile, VariableDeclarationKind } from 'ts-morph';
 import { astNodeName, contextName, DIR } from './utils';
 import { CodeWriter, ObjectWriter } from './code-writer';
