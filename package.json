@@ -15,7 +15,8 @@
   },
   "scripts": {
 	"build": "rm -rf dist && tsc",
-	"build:types": "tsc --declaration --emitDeclarationOnly"
+	"build:types": "tsc --declaration --emitDeclarationOnly",
+	"sample:gen:toylang": "ts-node ./sample/ToyLang/generate.ts"
   },
   "prettier": {
 	"printWidth": 80,

@@ -90,6 +90,11 @@ export type MatchAnyLabels<X, K extends MatcherType> = Pick<MatcherCommons<X, K>
 export type MatchAll<X, K extends MatcherType> = MatcherCommons<X, K> & {
   type: '&';
   match: Matcher<X, K>[];
+  /** Match `matches` in between every matcher of this sequence.
+   * 
+   * E.g. `$(a, b, c).inbetween(d, e)` matches `a d e b d e c`
+   */
+  inbetween(...matches: MatchElement<X, K>[]): MatchAll<X, K>;
 }
 export type MatchNot<X, K extends MatcherType> = MatcherCommons<X, K> & {
   type: '~';
@@ -107,6 +112,11 @@ export function matchAll<X, K extends MatcherType>(process: ProcessMatchElements
     match: process(matches),
     toAntlr() {
       return this.match.map(m => m.toAntlr()).join(' ');
+    },
+    inbetween(...matches: MatchElement<X, K>[]) {
+      const matchers = process(matches);
+      const inserted = this.match.flatMap((m, i) => i === 0 ? [m] : [...matchers, m]);
+      return matchAll(process, ...inserted);
     },
   });
   return result;

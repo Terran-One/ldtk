@@ -64,10 +64,11 @@ const parser = Parser.create('ToyParser', lexer, $ => {
       r.arrayLiteral,
       r.tupleLiteral,
     ),
-    arrayLiteral: $(LBRACK, $(exprx, $(COMMA, exprx).star).optional, RBRACK),
+    arrayLiteral: $(LBRACK, $.many(exprx, COMMA, true).optional, RBRACK).inbetween(NL.star),
     tupleLiteral: $.or(
-      $(LPAREN, $(expr, $(COMMA, expr).plus).optional, RPAREN), // (value0, value1, ...)
-      $(LPAREN, $(expr, COMMA), RPAREN), // (value0,)
+      $(LPAREN, NL.star, RPAREN), // ()
+      $(LPAREN, expr, COMMA, RPAREN).inbetween(NL.star), // (value0,)
+      $(LPAREN, expr, $(COMMA, NL.star, expr, NL.star).plus, RPAREN).inbetween(NL.star), // (value0, value1, ...)
     ),
     stringLiteral: T.String,
     symbolLiteral: $(T.COLON, Ident),
