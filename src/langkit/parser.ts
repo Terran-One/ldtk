@@ -120,8 +120,8 @@ class ParserRuleOption {
 type ParserDef = ParserRuleMap | ((api: ParserAPI) => ParserRuleMap);
 
 const common = <T extends object>(obj: T) => createMatcher.pin(parseMatchElements)(obj);
-type ParserAPI = ReturnType<typeof createAPI>;
-type ParserAPIConfig = {
+export type ParserAPI = ReturnType<typeof createAPI>;
+export type ParserAPIConfig = {
   /** The NL token the parser will use with convenience methods. */
   NL: Matchers['token'];
 }

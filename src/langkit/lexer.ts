@@ -267,7 +267,7 @@ type LexerPredicate = (this: any, state: any) => boolean;
 type LexerDef = LexerRuleMap | ((api: LexerAPI) => LexerRuleMap);
 
 const common = <T extends object>(obj: T) => createMatcher.pin(parseMatchElements)(obj);
-type LexerAPI = ReturnType<typeof createAPI>;
+export type LexerAPI = ReturnType<typeof createAPI>;
 
 function createAPI(mode?: string) {
   function api(match: string): Matchers['literal'];
