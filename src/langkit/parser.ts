@@ -126,6 +126,13 @@ export type ParserAPIConfig = {
   NL: Matchers['token'];
 }
 
+type ManyOptions = {
+  /** Whether to allow spreading the code up across multiple lines. Uses custom definable nl token configurable with `$.config({ NL })` */
+  multiline?: boolean;
+  /** Whether to allow a final `join` occurrence after the whole set which is optional. */
+  finalOptJoin?: boolean;
+}
+
 function createAPI(mode?: string) {
   let config: ParserAPIConfig = {
     NL: undefined as any,
@@ -253,13 +260,21 @@ function createAPI(mode?: string) {
    * 
    * If `multiline` is true, inserts `NL` tokens around each `join`. The nl token can be configured
    * with `$.config({ NL: ... })`.
+   * 
+   * If `finalOptJoin` is true, allows a final `join` occurrence after the whole set which is optional.
    */
-  api.many = (repeat: MatchElement, join: MatchElement, multiline = false) => {
-    if (!multiline)
-      return api(repeat, api(join, repeat).star);
-    const { NL } = config;
-    return api(repeat, api(NL.star, join, NL.star, repeat).star);
+  api.many = (repeat: MatchElement, join: MatchElement, { multiline, finalOptJoin }: ManyOptions) => {
+    const nls = config.NL.star;
+    const repeated = multiline ? api(repeat, nls, join, nls) : api(repeat, join);
+    if (finalOptJoin) {
+      if (multiline) api(repeated.star, repeat, api(nls, join).optional);
+      return api(repeated.star, repeat, join.optional);
+    }
+    return api(repeated.star, repeat);
   }
+  
+  /** An alias of `$.many(repeat, join, { multiline: true, finalOptJoin: true })` */
+  api.list = (repeat: MatchElement, join: MatchElement) => api.many(repeat, join, { multiline: true, finalOptJoin: true });
   
   /** Match any one named token. Token name must be capitalized. Combine with other matchers. */
   api.T = MatchTokenFactory(parseMatchElements, 'token');
