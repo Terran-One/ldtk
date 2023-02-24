@@ -263,7 +263,7 @@ function createAPI(mode?: string) {
    * 
    * If `finalOptJoin` is true, allows a final `join` occurrence after the whole set which is optional.
    */
-  api.many = (repeat: MatchElement, join: MatchElement, { multiline, finalOptJoin }: ManyOptions) => {
+  api.many = (repeat: MatchElement, join: MatchElement, { multiline, finalOptJoin }: ManyOptions = {}) => {
     const nls = config.NL.star;
     const repeated = multiline ? api(repeat, nls, join, nls) : api(repeat, join);
     if (finalOptJoin) {

@@ -64,7 +64,7 @@ const parser = Parser.create('ToyParser', lexer, $ => {
       r.arrayLiteral,
       r.tupleLiteral,
     ),
-    arrayLiteral: $(LBRACK, $.many(exprx, COMMA, true).optional, RBRACK).inbetween(NL.star),
+    arrayLiteral: $(LBRACK, $.list(exprx, COMMA).optional, RBRACK).inbetween(NL.star),
     tupleLiteral: $.or(
       $(LPAREN, NL.star, RPAREN), // ()
       $(LPAREN, expr, COMMA, RPAREN).inbetween(NL.star), // (value0,)
@@ -85,7 +85,7 @@ const parser = Parser.create('ToyParser', lexer, $ => {
       $(r.posArgs, $(COMMA, NL.star, r.varArgs).optional),
       r.varArgs,
     ).wrap(NL.star),
-    posArgs: $.many(r.fnArg, COMMA, true),
+    posArgs: $.list(r.fnArg, COMMA),
     varArgs: $(Ident, T.DOTS3),
     
     fnDef: $(
