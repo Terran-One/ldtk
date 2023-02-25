@@ -18,6 +18,7 @@ const lexer = Lexer.create('ToyLexer', $ => {
     WHILE: 'while',
     RETURN: 'return',
     
+    InterpolationEnd: $.rule('}').popMode.where(state => state.tplDepth > 0),
     LPAREN: '(',
     RPAREN: ')',
     LBRACE: '{',
@@ -72,7 +73,17 @@ const lexer = Lexer.create('ToyLexer', $ => {
       $("'", $.or(T.EscapeSequence, $.any).star, "'"),
       $('"', $.or(T.EscapeSequence, $.any).star, '"'),
     ),
+    Tick: $.rule('`').pushMode('TemplateString').exec(state => state.tplDepth++),
     EscapeSequence: $('\\', $.any),
+  }
+})
+.mode('TemplateString', $ => {
+  const { T } = $;
+  return {
+    TickInside: $.rule('`').popMode.type('Tick').exec(state => state.tplDepth--),
+    EscapeSequenceInside: $.rule(T.EscapeSequence).type('EscapeSequence'),
+    InterpolationStart: $.rule('${').pushMode('Interpolation'),
+    TplStringContent: $.any,
   }
 })
 .build()

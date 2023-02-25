@@ -5,6 +5,8 @@ const parser = Parser.create('ToyParser', lexer, $ => {
   const { EOF, r, T } = $;
   const { expr, exprx } = r;
   const { COMMA, LPAREN, RPAREN, LBRACE, RBRACE, LBRACK, RBRACK, NL, Ident } = T;
+  const nls = NL.star;
+  
   return {
     program: $(
       r.cmdsep.star,
@@ -21,7 +23,7 @@ const parser = Parser.create('ToyParser', lexer, $ => {
       ExprxRoot: exprx,
       FnCallNakedRoot: r.fnCallNaked,
     }),
-    import_: $(T.IMPORT, r.stringLiteral),
+    import_: $(T.IMPORT, T.String),
     cmdsep: $.or(NL, T.SEMIC),
     
     expr: $.options({
@@ -45,7 +47,7 @@ const parser = Parser.create('ToyParser', lexer, $ => {
     }),
     exprx: $.options({
       ExprExprx: expr,
-      IfExprx: r.if_, // `if` is a reserved keyword, so we use `if_` instead
+      IfExprx: r.ifStmt, // `if` is a reserved keyword, so we use `ifStmt` instead
     }),
     unaryOp: $(T.EXCL, T.TILDE),
     binaryOp: $.or(
@@ -56,29 +58,39 @@ const parser = Parser.create('ToyParser', lexer, $ => {
     
     let: $(T.LET, $.alias('variableName', Ident), $(T.ASSIGN, $.alias('variableValue', exprx)).optional),
     
-    literal: $.or(
-      T.TRUE, T.FALSE,
-      T.Number,
-      r.stringLiteral,
-      r.symbolLiteral,
-      r.arrayLiteral,
-      r.tupleLiteral,
-    ),
-    arrayLiteral: $(LBRACK, $.list(exprx, COMMA).optional, RBRACK).inbetween(NL.star),
-    tupleLiteral: $.or(
+    literal: $.options({
+      BooleanLiteral: $.or(T.TRUE, T.FALSE),
+      NumberLiteral: T.Number,
+      StringLiteral: T.String,
+      TemplateStringLiteral: r.templateString,
+      SymbolLiteral: $(T.COLON, Ident),
+      ArrayLiteral: r.array,
+      TupleLiteral: r.tuple,
+    }),
+    array: $(LBRACK, $.list(exprx, COMMA).optional, RBRACK).inbetween(NL.star),
+    tuple: $.or(
       $(LPAREN, NL.star, RPAREN), // ()
       $(LPAREN, expr, COMMA, RPAREN).inbetween(NL.star), // (value0,)
-      $(LPAREN, expr, $(COMMA, NL.star, expr, NL.star).plus, RPAREN).inbetween(NL.star), // (value0, value1, ...)
+      $(LPAREN, $.list(expr, COMMA), RPAREN).inbetween(NL.star), // (value0, value1, ...)
     ),
-    stringLiteral: T.String,
-    symbolLiteral: $(T.COLON, Ident),
+    templateString: $(
+      T.Tick,
+      $.or(
+        T.EscapeSequence,
+        r.stringInterpolation,
+        T.TplStringContent.plus,
+      ).star,
+      T.Tick,
+    ),
+    stringInterpolation: $(T.InterpolationStart, exprx, T.InterpolationEnd).inbetween(nls),
     
-    if_: $(
+    ifStmt: $(
       T.IF,
-      $.alias('condition', expr),
-      $.alias('trueBranch', exprx),
-      $(T.ELSE, $.alias('falseBranch', exprx)).optional,
-    ),
+      $.alias('condition[]', expr),
+      $.alias('ifBranch', exprx),
+      $(T.ELSE, T.IF, $.alias('condition[]', expr), $.alias('elseIfBranch[]', exprx)).inbetween(nls),
+      $(T.ELSE, $.alias('elseBranch', exprx)).inbetween(nls).optional,
+    ).inbetween(nls),
     
     fnArg: $(Ident, $(T.ASSIGN, exprx).optional),
     fnArgs: $.or(
