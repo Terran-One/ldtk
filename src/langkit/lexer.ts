@@ -42,6 +42,7 @@ interface LexerRule {
 export default class Lexer implements LexerMode {
   constructor(
     public readonly name: string,
+    public readonly init: LexerAction[] = [],
     public readonly rules: LexerRule[] = [],
     public readonly modes: LexerMode[] = [],
   ) {}
@@ -80,6 +81,8 @@ export default class Lexer implements LexerMode {
 }
 
 class LexerBuilder {
+  _init: LexerAction[] = [];
+  
   constructor(
     public _name: string,
     public _rules: LexerRuleMap = {},
@@ -103,9 +106,15 @@ class LexerBuilder {
     return this;
   }
   
+  init(action: LexerAction) {
+    this._init.push(action);
+    return this;
+  }
+  
   build(): Lexer {
     return new Lexer(
       this._name,
+      this._init,
       this.buildRules(this._rules),
       Object.entries(this._modes).map(
         ([name, rules]) => ({
@@ -203,7 +212,7 @@ class LexerRuleBuilder {
         s += `${this.name}: `;
         
         // rule semantic predicate
-        if (pred) s += '{(' + pred + ')(this.state)}?';
+        if (pred) s += '{(' + pred + `)(this['@ldtk_state@'])}?`;
         
         // for the sake of simplicity, actions are always applied to the whole rule
         // which is what ANTLR recommends anyways
@@ -214,7 +223,7 @@ class LexerRuleBuilder {
         s += this.match.toAntlr();
         
         // rule action
-        if (action) s += ') {(' + action + ')(this.state)}';
+        if (action) s += ') {(' + action + `)(this['@ldtk_state@'])}`;
         
         // rule parameters
         const { skip, channel, mode, pushMode, popMode, more, type } = this.meta;

@@ -82,10 +82,11 @@ const lexer = Lexer.create('ToyLexer', $ => {
   return {
     TickInside: $.rule('`').popMode.type('Tick').exec(state => state.tplDepth--),
     EscapeSequenceInside: $.rule(T.EscapeSequence).type('EscapeSequence'),
-    InterpolationStart: $.rule('${').pushMode('Interpolation'),
+    InterpolationStart: $.rule('${').pushMode('DEFAULT_MODE'),
     TplStringContent: $.any,
   }
 })
+.init(state => state.tplDepth = 0)
 .build()
 
 export default lexer;

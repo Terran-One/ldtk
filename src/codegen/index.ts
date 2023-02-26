@@ -2,9 +2,11 @@ import fs from 'fs/promises';
 import path from 'path';
 import { IndentationText, Project } from 'ts-morph';
 import { Parser } from '../langkit';
+import { generateLDTKLexer } from './generate-ldtklexer';
+import { generateLexer } from './generate-lexer';
 import { generateParser } from './generate-parser';
 import { generateVisitor } from './generate-visitor';
-import { astNodeName, contextName, DIR, spawn, SpawnPKM, tplDir } from './utils';
+import { contextName, DIR, spawn, SpawnPKM, tplDir } from './utils';
 
 export type GenerateOptions = {
   /** Package manager to use in order to invoke antlr4ts. Determined based on presence of package-lock.json or yarn.lock
@@ -50,6 +52,8 @@ async function generateCode(parser: Parser) {
   
   await Promise.all([
     generateUtils(project, parser),
+    generateLDTKLexer(project, parser),
+    generateLexer(project, parser),
     generateParser(project, parser),
     generateVisitor(project, parser),
   ])
