@@ -1,6 +1,6 @@
 {
 	"name": "@terran-one/ldtk",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"description": "Tools for creating languages in TypeScript",
 	"main": "dist/index.js",
 	"author": "Terran One",
