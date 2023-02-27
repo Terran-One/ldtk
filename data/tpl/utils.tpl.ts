@@ -27,7 +27,7 @@ export type OptionsASTNode<V extends VisitorMap, Name extends keyof V, Ctx, Opti
   type: Name;
   family: 'options';
   ctx: Ctx;
-  choice: V[Options[number]];
+  option: V[Options[number]];
   children: [V[Options[number]]];
 }
 
