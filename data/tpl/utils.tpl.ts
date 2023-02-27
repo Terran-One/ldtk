@@ -23,12 +23,12 @@ export type RuleASTNode<V extends VisitorMap, Name extends keyof V, Ctx, Rules e
     ? {} : {tokens: {[token in Tokens[number]]: TerminalNode[]}}
   )
 
-export type LabelASTNode<V extends VisitorMap, Name extends keyof V, Ctx, Choices extends (keyof V)[]> = {
+export type OptionsASTNode<V extends VisitorMap, Name extends keyof V, Ctx, Options extends (keyof V)[]> = {
   type: Name;
-  family: 'labels';
+  family: 'options';
   ctx: Ctx;
-  choice: V[Choices[number]];
-  children: [V[Choices[number]]];
+  choice: V[Options[number]];
+  children: [V[Options[number]]];
 }
 
 export type WithEOF = { EOF?: TerminalNode };

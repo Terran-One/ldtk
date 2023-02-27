@@ -1,10 +1,10 @@
-import { MatchAnyLabels as _MatchAnyLabels, ParserMatcher, ParserMatcherType, ParserMatchExtra } from '../langkit/matcher';
+import { MatchOptions as _MatchOptions, ParserMatcher, ParserMatcherType, ParserMatchExtra } from '../langkit/matcher';
 import Parser, { ParserRule } from '../langkit/parser';
 import { Project, SourceFile, VariableDeclarationKind } from 'ts-morph';
 import { astNodeName, contextName, DIR } from './utils';
 import { CodeWriter, ObjectWriter } from './code-writer';
 
-type MatchAnyLabels = _MatchAnyLabels<ParserMatchExtra, ParserMatcherType>;
+type MatchOptions = _MatchOptions<ParserMatchExtra, ParserMatcherType>;
 
 /** Generate an Antlr-specific visitor from the given Parser definition. */
 export async function generateVisitor(project: Project, parser: Parser) {
@@ -35,7 +35,7 @@ export async function generateVisitor(project: Project, parser: Parser) {
   });
   file.addImportDeclaration({
     moduleSpecifier: './utils',
-    namedImports: ['LabelASTNode', 'RuleASTNode', 'VisitorMap', 'WithEOF'],
+    namedImports: ['OptionsASTNode', 'RuleASTNode', 'VisitorMap', 'WithEOF'],
   });
   
   // alias root rule AST node for convenience
@@ -58,7 +58,7 @@ export async function generateVisitor(project: Project, parser: Parser) {
         w.obj(obj => {
           parser.rules.forEach(rule => {
             if (rule.match.type === '|+') {
-              writeVisitLabel({ parser, obj, rulename: rule.name, matcher: rule.match });
+              writeVisitOption({ parser, obj, rulename: rule.name, matcher: rule.match });
             } else {
               writeVisitRule({ parser, obj, rulename: rule.name, matcher: rule.match });
             }
@@ -122,14 +122,14 @@ function writeVisitRule({ parser, obj, rulename, matcher }: WriteVisitRuleParams
   });
 }
 
-interface WriteVisitLabelParams {
+interface WriteVisitOptionsParams {
   parser: Parser;
   obj: ObjectWriter;
   rulename: string;
-  matcher: MatchAnyLabels;
+  matcher: MatchOptions;
 }
 
-function writeVisitLabel({ parser, obj, rulename, matcher }: WriteVisitLabelParams) {
+function writeVisitOption({ parser, obj, rulename, matcher }: WriteVisitOptionsParams) {
   const w = obj.writer;
   const choices = matcher.match;
   
@@ -145,21 +145,21 @@ function writeVisitLabel({ parser, obj, rulename, matcher }: WriteVisitLabelPara
       }).writeline('];');
       
       // assert exactly one is valid
-      w.writeline('if (opts.filter(ctx => !!ctx).length > 1) throw Error("Multiple Label Contexts found");');
+      w.writeline('if (opts.filter(ctx => !!ctx).length > 1) throw Error("Multiple Option Contexts found");');
       w.nl();
       
-      w.writeline('const choice = opts.find(ctx => !!ctx);');
-      w.writeline('if (!choice) throw Error("No Label Context");');
+      w.writeline('const option = opts.find(ctx => !!ctx);');
+      w.writeline('if (!option) throw Error("No Option Context");');
       w.nl();
       
       // build result structure
       w.write(`return `);
       w.obj(obj => {
         obj.write('type', `'${rulename}'`);
-        obj.write('family', "'labels'");
+        obj.write('family', "'options'");
         obj.write('ctx', 'ctx');
-        obj.write('choice', 'choice');
-        obj.write('children', '[choice]');
+        obj.write('option', 'option');
+        obj.write('children', '[option]');
       });
       w.write(';');
     });
@@ -177,7 +177,7 @@ function generateASTTypes(parser: Parser, file: SourceFile) {
   // a type for every rule & labeled choice
   parser.rules.forEach(rule => {
     if (rule.match.type === '|+') {
-      generateLabelNodeType(file, rule, rule.match, typemap);
+      generateOptionNodeType(file, rule, rule.match, typemap);
     }
     else {
       generateMatcherNodeType(file, rule.name, rule.match, typemap);
@@ -203,7 +203,7 @@ function generateASTTypes(parser: Parser, file: SourceFile) {
   })
 }
 
-function generateLabelNodeType(file: SourceFile, rule: ParserRule, matcher: MatchAnyLabels, typemap: Record<string, string>) {
+function generateOptionNodeType(file: SourceFile, rule: ParserRule, matcher: MatchOptions, typemap: Record<string, string>) {
   const choices = matcher.match;
   
   // generate AST node type for overarching label rule
@@ -212,7 +212,7 @@ function generateLabelNodeType(file: SourceFile, rule: ParserRule, matcher: Matc
     name: astNodeName(rule.name),
     type: writer => {
       const w = new CodeWriter(writer);
-      w.write('LabelASTNode<ASTMap, ');
+      w.write('OptionsASTNode<ASTMap, ');
       w.write(`'${rule.name}', `);
       w.write(contextName(rule.name)).write(', ');
       w.write('[')

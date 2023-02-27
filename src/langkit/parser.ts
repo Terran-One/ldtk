@@ -2,7 +2,7 @@ import { mergeRules } from "./common";
 import Lexer from "./lexer";
 import {
   createMatcher,
-  MatchAnyLabels as _MatchAnyLabels,
+  MatchOptions as _MatchOptions,
   MatchTokenFactory,
   ParserMatcher,
   ParserMatcherType,
@@ -12,7 +12,7 @@ import {
   matchAll,
 } from "./matcher";
 
-type MatchAnyLabels = _MatchAnyLabels<ParserMatchExtra, ParserMatcherType>;
+type MatchOptions = _MatchOptions<ParserMatchExtra, ParserMatcherType>;
 
 export type ParserRule =
   | { // Pretty much all matchers but labeled options
@@ -22,9 +22,9 @@ export type ParserRule =
       /** Produce a string representation of this rule. */
       toAntlr(): string;
     }
-  | { // MatchAnyLabels is special as it can only appear at the root of a rule. It does thus not occur in `ParserMatcherType`.
+  | { // MatchOptions is special as it can only appear at the root of a rule. It does thus not occur in `ParserMatcherType`.
       name: string;
-      match: MatchAnyLabels;
+      match: MatchOptions;
       
       /** Produce a string representation of this rule. */
       toAntlr(): string;
@@ -86,7 +86,7 @@ class ParserBuilder {
 class ParserRuleBuilder {
   constructor(
     public _mode: string | undefined,
-    public _match: ParserMatcher | MatchAnyLabels,
+    public _match: ParserMatcher | MatchOptions,
   ) {}
   
   build(name: string): ParserRule {
@@ -100,7 +100,7 @@ class ParserRuleBuilder {
     }
   }
   
-  static from(elem: MatchElement | MatchAnyLabels | ParserRuleBuilder, mode?: string): ParserRuleBuilder {
+  static from(elem: MatchElement | MatchOptions | ParserRuleBuilder, mode?: string): ParserRuleBuilder {
     if (elem instanceof ParserRuleBuilder) return elem;
     return new ParserRuleBuilder(
       mode,
@@ -206,7 +206,7 @@ function createAPI(mode?: string) {
    * }));
    * ```
    */
-  api.options = (options: OptionMap): MatchAnyLabels => {
+  api.options = (options: OptionMap): MatchOptions => {
     const opts = Object.entries(options).map(([label, match]) => ({
       label,
       match: 'type' in match ? new ParserRuleOption(match) : match,
@@ -294,7 +294,7 @@ function createAPI(mode?: string) {
   return api;
 }
 
-type ParserRuleMap = Record<string, MatchElement | MatchAnyLabels | ParserRuleBuilder>;
+type ParserRuleMap = Record<string, MatchElement | MatchOptions | ParserRuleBuilder>;
 
 type MatchElement = ParserMatcher;
 type MatchTokenFactory = Record<string, Matchers['token']>;
@@ -303,10 +303,10 @@ const parseMatchElements: ProcessMatchElements<ParserMatchExtra, ParserMatcherTy
   matches => matches.map(el => parseMatchElement(el));
 
 function parseMatchElement<T extends ParserMatcher>(match: T): T;
-function parseMatchElement(match: MatchAnyLabels): MatchAnyLabels;
+function parseMatchElement(match: MatchOptions): MatchOptions;
 function parseMatchElement(match: MatchElement): ParserMatcher;
-function parseMatchElement(match: MatchElement | MatchAnyLabels): ParserMatcher | MatchAnyLabels;
-function parseMatchElement(match: MatchElement | MatchAnyLabels) {
+function parseMatchElement(match: MatchElement | MatchOptions): ParserMatcher | MatchOptions;
+function parseMatchElement(match: MatchElement | MatchOptions) {
   if (typeof match === 'string')
     throw Error('Literals are no longer valid in Parser grammar. Please define them in your Lexer and use Tokens instead.');
   

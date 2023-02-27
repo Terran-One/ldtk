@@ -79,7 +79,7 @@ export type MatchAny<X, K extends MatcherType> = MatcherCommons<X, K> & {
   type: '|';
   match: Matcher<X, K>[];
 }
-export type MatchAnyLabels<X, K extends MatcherType> = Pick<MatcherCommons<X, K>, 'toAntlr'> & {
+export type MatchOptions<X, K extends MatcherType> = Pick<MatcherCommons<X, K>, 'toAntlr'> & {
   type: '|+';
   match: {
     match: Matcher<X, K>;
