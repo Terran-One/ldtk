@@ -11,14 +11,14 @@ type RuleAST = {
   children: ASTLike[] | never[];
   ctx: AntlrCtx;
 }
-type LabelAST = {
+type OptionsAST = {
   type: string;
-  family: 'labels';
+  family: 'options';
   choice: RuleAST;
   children: [RuleAST];
   ctx: AntlrCtx;
 }
-type ASTLike = RuleAST | LabelAST;
+type ASTLike = RuleAST | OptionsAST;
 
 export async function dump(src: string, ast: ASTLike, file: string | FileHandle = '', level = 0) {
   if (file && typeof file === 'string')
@@ -28,11 +28,11 @@ export async function dump(src: string, ast: ASTLike, file: string | FileHandle 
 
 async function dump_inner(src: string, ast: ASTLike, level: number) {
   const indent = '  '.repeat(level);
-  const isLabel = 'family' in ast && ast.family === 'labels';
+  const isOptions = 'family' in ast && ast.family === 'options';
   
   let line = '';
   
-  if (isLabel) {
+  if (isOptions) {
     line += `${indent}${chalk.green(ast.choice.type)}`;
   } else {
     line += `${indent}${chalk.cyan(ast.type)}`;
@@ -44,7 +44,7 @@ async function dump_inner(src: string, ast: ASTLike, level: number) {
   
   console.log(line);
     
-  if (isLabel) {
+  if (isOptions) {
     ast.choice.children.forEach(child => dump_inner(src, child, level + 1));
   } else {
     ast.children.forEach(child => dump_inner(src, child, level + 1));
