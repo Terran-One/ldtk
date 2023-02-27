@@ -20,10 +20,8 @@ type OptionsAST = {
 }
 type ASTLike = RuleAST | OptionsAST;
 
-export async function dump(src: string, ast: ASTLike, file: string | FileHandle = '', level = 0) {
-  if (file && typeof file === 'string')
-    file = await fs.open(file, 'w');
-  return await dump_inner(src, ast, level);
+export async function dump(src: string, ast: ASTLike) {
+  return await dump_inner(src, ast, 0);
 }
 
 async function dump_inner(src: string, ast: ASTLike, level: number) {
