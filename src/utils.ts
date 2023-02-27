@@ -14,7 +14,7 @@ type RuleAST = {
 type OptionsAST = {
   type: string;
   family: 'options';
-  choice: RuleAST;
+  option: RuleAST;
   children: [RuleAST];
   ctx: AntlrCtx;
 }
@@ -33,7 +33,7 @@ async function dump_inner(src: string, ast: ASTLike, level: number) {
   let line = '';
   
   if (isOptions) {
-    line += `${indent}${chalk.green(ast.choice.type)}`;
+    line += `${indent}${chalk.green(ast.option.type)}`;
   } else {
     line += `${indent}${chalk.cyan(ast.type)}`;
   }
@@ -45,7 +45,7 @@ async function dump_inner(src: string, ast: ASTLike, level: number) {
   console.log(line);
     
   if (isOptions) {
-    ast.choice.children.forEach(child => dump_inner(src, child, level + 1));
+    ast.option.children.forEach(child => dump_inner(src, child, level + 1));
   } else {
     ast.children.forEach(child => dump_inner(src, child, level + 1));
   }
