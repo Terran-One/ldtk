@@ -1,6 +1,6 @@
 import { Token } from 'antlr4ts/Token';
 import chalk from 'chalk';
-import fs, { FileHandle } from 'fs/promises';
+import type { AnyVisitor, BaseTransformer, TransformerASTNodes, VisitorASTNodes } from './transform';
 
 export type AntlrCtx = {
   _start: Token;
@@ -53,4 +53,19 @@ export function getCodeRange(src: string, start: Token, stop: Token) {
   const startIdx = start.startIndex;
   const stopIdx = stop.stopIndex;
   return src.substring(startIdx, stopIdx + 1);
+}
+
+export function createNodeFinder<V extends AnyVisitor | BaseTransformer<any, any>>(visit: V) {
+  type Nodes = V extends BaseTransformer<any, any>
+    ? TransformerASTNodes<V>
+    : V extends AnyVisitor
+    ? VisitorASTNodes<V>
+    : never;
+  return function findNodes<Type extends Nodes['type']>(type: Type, node: ASTLike, result = new Set<ASTLike>()): Array<Nodes & { type: Type }> {
+    if (node.type === type) result.add(node);
+    for (const child of node.children) {
+      findNodes(type, child, result);
+    }
+    return [...result as any];
+  }
 }

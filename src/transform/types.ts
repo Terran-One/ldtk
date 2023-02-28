@@ -1,10 +1,12 @@
+import type { BaseTransformer, TransformVisitorFromBase } from './transformer';
 
 /** Visitor taking any single one input and producing some AST-like output */
 export type AnyVisitor = {
   [K: string]: (ctx: any) => ASTNodeBase;
 }
 
-export type ASTNodes<V extends AnyVisitor> = ReturnType<V[keyof V]>;
+export type VisitorASTNodes<V extends AnyVisitor> = ReturnType<V[keyof V]>;
+export type TransformerASTNodes<T extends BaseTransformer<any, any>> = VisitorASTNodes<TransformVisitorFromBase<T>>;
 export type ASTNodeBase = RuleASTNode | OptionsASTNode;
 export type RuleASTNode = {
   type: string;
