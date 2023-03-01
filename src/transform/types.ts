@@ -1,5 +1,7 @@
 import type { BaseTransformer, TransformVisitorFromBase } from './transformer';
 
+export type Fn<Args extends any[] = any[], R = any> = (...args: Args) => R;
+
 /** Visitor taking any single one input and producing some AST-like output */
 export type AnyVisitor = {
   [K: string]: (ctx: any) => ASTNodeBase;

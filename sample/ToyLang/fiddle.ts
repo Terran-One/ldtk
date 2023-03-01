@@ -1,8 +1,10 @@
 import { Parser } from '../../generated/Parser';
+import { visit } from '../../generated/Visitor';
 import { BaseTransformer, utils } from '../../src';
 import { createTransformer, TransformerASTNodes } from '../../src/transform';
+import { AST } from '../../src/transform/AST';
 
-type Nodes = TransformerASTNodes<typeof tf2>;
+// type Nodes = TransformerASTNodes<typeof tf2>;
 
 const src = `
 import 'std'
@@ -24,22 +26,8 @@ print \`foo\${sum(...(process.argv as Numbers))}bar\`
 `
 
 const parser = Parser.fromString(src);
-
-const tf1raw = createTransformer(parser._visit, {
-  import_(node) {
-    let source = node.tokens.String[0].text;
-    source = source.substring(1, source.length-1);
-    
-    return {
-      ...node,
-      module: source,
-    }
-  }
-});
-const tf1 = BaseTransformer.from(parser._visit, tf1raw);
-
-const tf2raw = createTransformer(tf1, {
-  program(node) {
+const ast = AST.from(visit, parser.process())
+  .transform('program', node => {
     const { rules } = node;
     const imports = rules.import_;
     const roots = rules.root;
@@ -52,20 +40,18 @@ const tf2raw = createTransformer(tf1, {
       },
       children: [...imports, ...roots],
     }
-  },
-  
-  tuple(node) {
-    const values = node.rules.expr;
+  })
+  .transform('import_', node => {
     return {
       ...node,
-      values,
+      module: node.tokens.String[0].text.substring(1, node.tokens.String[0].text.length-1),
     }
-  },
-});
-const tf2 = BaseTransformer.from(tf1, tf2raw);
-
-const findNodes = utils.createNodeFinder(tf2);
-
-const ast = tf2.transform(tf1.transform(parser.process()));
-console.log(findNodes('import_', ast)[0].module)
-utils.dump(src, ast);
+  })
+  .transform('expr', node => {
+    return {
+      ...node,
+      foo: 'bar',
+    }
+  })
+console.log(ast.find('expr').map(expr => expr.foo).filter(foo => foo === 'bar').length)
+utils.dump(src, ast.root);

@@ -1,8 +1,21 @@
 import { Token } from 'antlr4ts/Token';
 import chalk from 'chalk';
-import type { AnyVisitor, BaseTransformer, TransformerASTNodes, VisitorASTNodes } from './transform';
+import { AnyVisitor, BaseTransformer, TransformerASTNodes, TransformVisitorFromBase, VisitorASTNodes } from './transform';
+import type { AST } from './transform/AST';
 
-export type AntlrCtx = {
+type ExtractASTMapFromVisitor<V extends AnyVisitor> = {
+  [K in keyof V]: ReturnType<V[K]>;
+}
+export type ASTMap<T> =
+  T extends AST<infer M, any> ? M
+  : T extends BaseTransformer
+  ? ExtractASTMapFromVisitor<TransformVisitorFromBase<T>>
+  : T extends AnyVisitor
+  ? ExtractASTMapFromVisitor<T>
+  : never;
+export type ASTNodes<T> = ASTMap<T>[keyof ASTMap<T>];
+
+type AntlrCtx = {
   _start: Token;
   _stop: Token | undefined;
 }
