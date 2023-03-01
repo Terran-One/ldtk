@@ -1,6 +1,7 @@
 import type { BaseTransformer, TransformVisitorFromBase } from './transformer';
 
 export type Fn<Args extends any[] = any[], R = any> = (...args: Args) => R;
+export type Defined<T> = T extends undefined | null ? never : T;
 
 /** Visitor taking any single one input and producing some AST-like output */
 export type AnyVisitor = {
