@@ -8,6 +8,13 @@ export type TransformMap<V extends AnyVisitor = any> = {
   [K in keyof V]?: (node: ReturnType<V[K]>) => any;
 }
 
+type VisitorHelper<V extends AnyVisitor | BaseTransformer> =
+  V extends BaseTransformer
+  ? TransformVisitorFromBase<V>
+  : V extends AnyVisitor
+  ? V
+  : never;
+
 type Transform<V extends AnyVisitor, T extends TransformMap<V>, Type extends string> =
   Type extends keyof T
   ? ReturnType<Defined<T[Type]>>
@@ -69,7 +76,7 @@ export type DeriveTransformer<Base> =
  * }
  * ```
  */
-export class BaseTransformer<V extends AnyVisitor, T extends TransformMap<V>> {
+export class BaseTransformer<V extends AnyVisitor = any, T extends TransformMap<V> = any> {
   constructor(private transformer: T) {}
   
   transform<N extends VisitorASTNodes<V>>(node: N): Transform<V, T, N['type']> {
@@ -108,17 +115,15 @@ export class BaseTransformer<V extends AnyVisitor, T extends TransformMap<V>> {
   }
   
   /** Helper for defining a transformer based on the types of `visit`. */
-  static from<V extends AnyVisitor, T extends TransformMap<V>>(visit: V, transformer: T) {
-    return new BaseTransformer<V, T>(transformer);
-  }
-  
-  static derive<Base extends BaseTransformer<any, any>, T extends TransformMap<TransformVisitorFromBase<Base>>>(base: Base, transformer: T) {
-    return new BaseTransformer<TransformVisitorFromBase<Base>, T>(transformer);
+  static from<V extends AnyVisitor | BaseTransformer, T extends TransformMap<VisitorHelper<V>>>(visit: V, transformer: T) {
+    return new BaseTransformer<
+      V extends BaseTransformer ? TransformVisitorFromBase<V> : V,
+      T
+    >(transformer);
   }
 }
 
-export const makeTransformer = <V extends AnyVisitor, T extends TransformMap<V>>(visit: V, transformer: T) => transformer;
-export const deriveTransformer = <Base extends BaseTransformer<any, any>, T extends TransformMap<TransformVisitorFromBase<Base>>>(base: Base, transformer: T) => transformer;
+export const createTransformer = <V extends AnyVisitor | BaseTransformer, T extends TransformMap<VisitorHelper<V>>>(visit: V, transformer: T) => transformer;
 
 function clone<T>(source: T): T {
   const result = Object.create(Object.getPrototypeOf(source));

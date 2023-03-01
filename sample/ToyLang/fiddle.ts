@@ -1,6 +1,6 @@
 import { Parser } from '../../generated/Parser';
 import { BaseTransformer, utils } from '../../src';
-import { deriveTransformer, makeTransformer, TransformerASTNodes } from '../../src/transform';
+import { createTransformer, TransformerASTNodes } from '../../src/transform';
 
 type Nodes = TransformerASTNodes<typeof tf2>;
 
@@ -25,7 +25,7 @@ print \`foo\${sum(...(process.argv as Numbers))}bar\`
 
 const parser = Parser.fromString(src);
 
-const tf1raw = makeTransformer(parser._visit, {
+const tf1raw = createTransformer(parser._visit, {
   import_(node) {
     let source = node.tokens.String[0].text;
     source = source.substring(1, source.length-1);
@@ -38,7 +38,7 @@ const tf1raw = makeTransformer(parser._visit, {
 });
 const tf1 = BaseTransformer.from(parser._visit, tf1raw);
 
-const tf2raw = deriveTransformer(tf1, {
+const tf2raw = createTransformer(tf1, {
   program(node) {
     const { rules } = node;
     const imports = rules.import_;
@@ -62,10 +62,10 @@ const tf2raw = deriveTransformer(tf1, {
     }
   },
 });
-const tf2 = BaseTransformer.derive(tf1, tf2raw);
+const tf2 = BaseTransformer.from(tf1, tf2raw);
 
 const findNodes = utils.createNodeFinder(tf2);
 
 const ast = tf2.transform(tf1.transform(parser.process()));
-console.log(findNodes('expr', ast))
+console.log(findNodes('import_', ast)[0].module)
 utils.dump(src, ast);
