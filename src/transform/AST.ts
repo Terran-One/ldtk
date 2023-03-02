@@ -76,7 +76,39 @@ export class AST<M extends NodeMap, Root extends ASTNodeBase> {
     return node;
   }
   
+  /** Find direct children of this represented AST's root of given `type`. */
   find<Type extends keyof M>(type: Type): M[Type][] {
+    return this.root.children.filter(child => child.type === type) as any;
+  }
+  
+  /** Find all nested children of given `type` up until a node of type `before`.
+   * 
+   * In a tree of this structure:
+   * |- A
+   *    |- B
+   *    |  \- C
+   *    \- B
+   *       \- C
+   *          \-B
+   * `findBefore('B', 'C')` would return the two `B` nodes that hierarchically appear before each `C` node.
+   */
+  findBefore<Type extends keyof M>(type: Type, before: keyof M): M[Type][] {
+    return [...this._inner_findBefore(type, before, this._root)] as any;
+  }
+  
+  private _inner_findBefore(type: keyof M, before: keyof M, node: ASTNodeBase, set = new Set<ASTNodeBase>()) {
+    if (node.type === before) return set;
+    if (node.type === type) set.add(node);
+    if (node.family === 'options') {
+      this._inner_findBefore(type, before, node.option, set);
+    } else {
+      node.children.forEach(child => this._inner_findBefore(type, before, child, set));
+    }
+    return set;
+  }
+  
+  /** Find all nodes of given `type` deeply within the entire represented AST. */
+  findDeep<Type extends keyof M>(type: Type): M[Type][] {
     return [...this._inner_find(type, this._root)] as any;
   }
   
