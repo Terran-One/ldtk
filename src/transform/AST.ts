@@ -96,28 +96,35 @@ export class AST<M extends NodeMap, Root extends ASTNodeBase> {
     return [...this._inner_findBefore(type, before, this._root)] as any;
   }
   
-  private _inner_findBefore(type: keyof M, before: keyof M, node: ASTNodeBase, set = new Set<ASTNodeBase>()) {
-    if (node.type === before) return set;
+  private _inner_findBefore(type: keyof M, before: keyof M, node: ASTNodeBase, first = true, set = new Set<ASTNodeBase>()) {
+    // if first node is a `before` node itself, ignore it
+    if (!first && node.type === before) return set;
+    
+    // collect correct nodes
     if (node.type === type) set.add(node);
+    
+    // recurse
     if (node.family === 'options') {
-      this._inner_findBefore(type, before, node.option, set);
+      this._inner_findBefore(type, before, node.option, false, set);
     } else {
-      node.children.forEach(child => this._inner_findBefore(type, before, child, set));
+      node.children.forEach(child => this._inner_findBefore(type, before, child, false, set));
     }
+    
+    // finish
     return set;
   }
   
   /** Find all nodes of given `type` deeply within the entire represented AST. */
   findDeep<Type extends keyof M>(type: Type): M[Type][] {
-    return [...this._inner_find(type, this._root)] as any;
+    return [...this._inner_findDeep(type, this._root)] as any;
   }
   
-  private _inner_find(type: keyof M, node: ASTNodeBase, set = new Set<ASTNodeBase>()) {
+  private _inner_findDeep(type: keyof M, node: ASTNodeBase, set = new Set<ASTNodeBase>()) {
     if (node.type === type) set.add(node);
     if (node.family === 'options') {
-      this._inner_find(type, node.option, set);
+      this._inner_findDeep(type, node.option, set);
     } else {
-      node.children.forEach(child => this._inner_find(type, child, set));
+      node.children.forEach(child => this._inner_findDeep(type, child, set));
     }
     return set;
   }
