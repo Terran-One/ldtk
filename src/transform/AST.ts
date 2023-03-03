@@ -81,6 +81,14 @@ export class AST<M extends NodeMap, Root extends ASTNodeBase> {
     return this.root.children.filter(child => child.type === type) as any;
   }
   
+  /** Recursively find all nodes of given `type` that adhere to given `pred`icate.
+   * 
+   * Effectively returns a subset of `findDeep(type)` that passes the predicate.
+   */
+  findBy<Type extends keyof M>(type: Type, pred: (node: M[Type]) => boolean): M[Type][] {
+    return this.findDeep(type).filter(pred);
+  }
+  
   /** Find all nested children of given `type` up until a node of type `before`.
    * 
    * In a tree of this structure:
