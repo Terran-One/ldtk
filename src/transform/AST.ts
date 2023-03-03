@@ -77,16 +77,16 @@ export class AST<M extends NodeMap, Root extends ASTNodeBase> {
   }
   
   /** Find direct children of this represented AST's root of given `type`. */
-  find<Type extends keyof M>(type: Type): M[Type][] {
+  findChildren<Type extends keyof M>(type: Type): M[Type][] {
     return this.root.children.filter(child => child.type === type) as any;
   }
   
   /** Recursively find all nodes of given `type` that adhere to given `pred`icate.
    * 
-   * Effectively returns a subset of `findDeep(type)` that passes the predicate.
+   * Effectively returns a subset of `find(type)` that passes the predicate.
    */
   findBy<Type extends keyof M>(type: Type, pred: (node: M[Type]) => boolean): M[Type][] {
-    return this.findDeep(type).filter(pred);
+    return this.find(type).filter(pred);
   }
   
   /** Find all nested children of given `type` up until a node of type `before`.
@@ -123,16 +123,16 @@ export class AST<M extends NodeMap, Root extends ASTNodeBase> {
   }
   
   /** Find all nodes of given `type` deeply within the entire represented AST. */
-  findDeep<Type extends keyof M>(type: Type): M[Type][] {
-    return [...this._inner_findDeep(type, this._root)] as any;
+  find<Type extends keyof M>(type: Type): M[Type][] {
+    return [...this._inner_find(type, this._root)] as any;
   }
   
-  private _inner_findDeep(type: keyof M, node: ASTNodeBase, set = new Set<ASTNodeBase>()) {
+  private _inner_find(type: keyof M, node: ASTNodeBase, set = new Set<ASTNodeBase>()) {
     if (node.type === type) set.add(node);
     if (node.family === 'options') {
-      this._inner_findDeep(type, node.option, set);
+      this._inner_find(type, node.option, set);
     } else {
-      node.children.forEach(child => this._inner_findDeep(type, child, set));
+      node.children.forEach(child => this._inner_find(type, child, set));
     }
     return set;
   }

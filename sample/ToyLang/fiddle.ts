@@ -35,7 +35,7 @@ print \`foo\${sum(...(process.argv as Numbers))}bar\`
 `
 
 const ast = parse(src);
-console.log(ast.findDeep('expr').map(expr => expr.foo).filter(foo => foo === 'bar').length)
+console.log(ast.find('expr').map(expr => expr.foo).filter(foo => foo === 'bar').length)
 const root = ast.root.rules.roots[1];
 if (root.option.type !== 'ExprxRoot') throw Error('nope');
 
@@ -43,9 +43,9 @@ const exprx = root.option.rules.exprx[0];
 if (exprx.option.type !== 'ExprExprx') throw Error('nope');
 
 console.log(exprx.option.rules.expr[0].foo);
-console.log(ast.findDeep('fnArg')[0].variadic);
+console.log(ast.find('fnArg')[0].variadic);
 
-const literal = ast.findDeep('literal')[0];
+const literal = ast.find('literal')[0];
 if (literal) {
   console.log(`${literal.option.type} is primitive: ${literal.primitive}`);
 } else {
@@ -53,10 +53,10 @@ if (literal) {
 }
 
 // template strings are a bit weird, b/c tokens match individual characters rather than parts
-const tplstr = ast.findDeep('templateString')[0];
+const tplstr = ast.find('templateString')[0];
 if (!tplstr) throw 'no template string found';
 if (tplstr.children.length !== 1) throw 'template string has wrong number of children';
-console.log('template string:', ast.findDeep('templateString')[0].ctx.text);
+console.log('template string:', ast.find('templateString')[0].ctx.text);
 
 export function parse(src: string) {
   const parser = Parser.fromString(src);
