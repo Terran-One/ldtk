@@ -5,6 +5,11 @@ import { ExprxASTNode, visit } from '../../generated/Visitor';
 import { utils } from '../../src';
 import { AST } from '../../src/transform/AST';
 
+type FooASTNode = {
+  type: 'foo';
+  family: 'rule';
+  children: never[];
+}
 type FnArgASTNode = {
   type: 'fnArg';
   family: 'rule';
@@ -133,6 +138,7 @@ export function parse(src: string) {
         }
       },
     })
+    .forget('cmdsep')
   return ast;
 }
 

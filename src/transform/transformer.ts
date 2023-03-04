@@ -1,4 +1,4 @@
-import { VisitorASTNodes, AnyVisitor, ASTNodeBase, OptionsASTNode, RuleASTNode } from './types';
+import { VisitorASTNodes, AnyVisitor, ASTNodeBase, OptionsASTNode, RuleASTNode } from '../types';
 
 type Fn<Args extends any[] = any[], R = any> = (...args: Args) => R;
 type Defined<T> = T extends undefined ? never : T;

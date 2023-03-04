@@ -1,5 +1,5 @@
 import { ASTMap } from '../utils';
-import type { AnyVisitor, ASTNodeBase, Defined, Fn, OptionsASTNode, RuleASTNode, VisitorASTNodes } from './types';
+import type { AnyVisitor, ASTNodeBase, Defined, OptionsASTNode, RuleASTNode, VisitorASTNodes } from '../types';
 
 type NodeMap = {
   [K: string]: ASTNodeBase;
@@ -12,7 +12,7 @@ type TransformMap<M extends NodeMap> = {
 }
 
 type TransformNodeMap<M extends NodeMap, T extends TransformMap<M>> =
-  Omit<M, keyof T> & { [K in keyof T]: ReturnType<Defined<T[K]>> };
+  Omit<M, keyof T> & { [K in keyof T & keyof M]: ReturnType<Defined<T[K]>> };
 type TransformNode<M extends NodeMap, T extends TransformMap<M>, N extends ASTNodeBase> =
   N['type'] extends keyof T
   ? TransformNodeGeneric<M, T, ReturnType<Defined<T[N['type']]>>>
@@ -42,11 +42,28 @@ type TransformNodeGeneric<M extends NodeMap, T extends TransformMap<M>, N extend
 export class AST<M extends NodeMap, Root extends ASTNodeBase> {
   constructor(private _root: Root) {}
   
+  /** Transform existing node types into something else that resembles an ASTNodeBase. */
   transform<T extends TransformMap<M>>(
     transforms: T,
   ): AST<TransformNodeMap<M, T>, TransformNode<M, T, Root>>
   {
     this._root = this._inner_transform(this._root, transforms, new Map());
+    return this as any;
+  }
+  
+  /** Introduce a new AST node type into the node map.
+   * 
+   * Should be used after `transform` which is where the actual AST node is injected.
+   */
+  extend<Type extends Exclude<string, keyof M>, Node extends ASTNodeBase>(): AST<M & { [K in Type]: Node }, Root> {
+    return this as any;
+  }
+  
+  /** Drop a node from the node map.
+   * 
+   * Should be used after `transform` which is where the actual AST node is spliced out.
+   */
+  forget<Type extends keyof M>(type: Type): AST<Omit<M, Type>, Root> {
     return this as any;
   }
   

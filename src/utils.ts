@@ -1,6 +1,6 @@
 import { Token } from 'antlr4ts/Token';
 import chalk from 'chalk';
-import { AnyVisitor, BaseTransformer, TransformerASTNodes, TransformVisitorFromBase, VisitorASTNodes } from './transform';
+import { AnyVisitor } from './transform';
 import type { AST } from './transform/AST';
 
 type ExtractASTMapFromVisitor<V extends AnyVisitor> = {
@@ -8,8 +8,6 @@ type ExtractASTMapFromVisitor<V extends AnyVisitor> = {
 }
 export type ASTMap<T> =
   T extends AST<infer M, any> ? M
-  : T extends BaseTransformer
-  ? ExtractASTMapFromVisitor<TransformVisitorFromBase<T>>
   : T extends AnyVisitor
   ? ExtractASTMapFromVisitor<T>
   : never;
@@ -68,17 +66,7 @@ export function getCodeRange(src: string, start: Token, stop: Token) {
   return src.substring(startIdx, stopIdx + 1);
 }
 
-export function createNodeFinder<V extends AnyVisitor | BaseTransformer<any, any>>(visit: V) {
-  type Nodes = V extends BaseTransformer<any, any>
-    ? TransformerASTNodes<V>
-    : V extends AnyVisitor
-    ? VisitorASTNodes<V>
-    : never;
-  return function findNodes<Type extends Nodes['type']>(type: Type, node: ASTLike, result = new Set<ASTLike>()): Array<Nodes & { type: Type }> {
-    if (node.type === type) result.add(node);
-    for (const child of node.children) {
-      findNodes(type, child, result);
-    }
-    return [...result as any];
-  }
+export function stripQuotes(token: Token) {
+  const text = token.text!;
+  return text.match(/^"(.*)"$/)?.[1] ?? text.match(/^'(.*)'$/)?.[1] ?? text;
 }
