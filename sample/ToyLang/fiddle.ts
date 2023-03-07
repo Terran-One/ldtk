@@ -7,7 +7,7 @@ import {
   StringInterpolationASTNode,
   VarArgsASTNode,
 } from '../../generated/Visitor';
-import { AST, ASTNodeBase, IOptionsASTNode, IRuleASTNode, IVirtualASTNode, Location, ParserRuleContext, tokensLocation, utils } from '../../src';
+import { AST, ASTNodeBase, ASTNodeMap, IOptionsASTNode, IRuleASTNode, IVirtualASTNode, Location, ParserRuleContext, tokensLocation, utils } from '../../src';
 import { collectTokens, getCodeRange, groupBy, joinTokens, sortNodes, sortTokens } from '../../src/utils';
 
 class FnArgASTNode implements IRuleASTNode {
@@ -67,6 +67,7 @@ if args is Numbers:
     result += arg
   }
   print result
+  print 'foobar'
   result
 }
 sum ...: NaN
@@ -75,13 +76,13 @@ print sum ...(process.argv as Numbers)
 print \`foo\${sum(...(process.argv as Numbers))}bar\`
 `
 
-const ast = parse(src);
+type NodeMap = ASTNodeMap<typeof ast>;
+type Nodes = NodeMap[keyof NodeMap];
 
-// template strings are a bit weird, b/c tokens match individual characters rather than parts
-// const tplstr = ast.find('templateString')[0];
-// if (!tplstr) throw 'no template string found';
-// if (tplstr.children.length !== 3) throw 'template string has wrong number of children';
-// console.log('template string:', getSourceFromLocation(src, ast.find('templateString')[0]!.location));
+const ast = parse(src);
+if (ast.findBefore('StringLiteral', 'block').length !== 0)
+  throw Error('Expected no StringLiteral before block');
+
 utils.dump(src, ast.root);
 
 export function parse(src: string) {

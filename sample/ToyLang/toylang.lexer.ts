@@ -70,8 +70,8 @@ const lexer = Lexer.create('ToyLexer', $ => {
     POUND: '#',
     
     String: $.or(
-      $("'", $.or(T.EscapeSequence, $.any).star, "'"),
-      $('"', $.or(T.EscapeSequence, $.any).star, '"'),
+      $("'", $.or(T.EscapeSequence, $.any).star.lazy, "'"),
+      $('"', $.or(T.EscapeSequence, $.any).star.lazy, '"'),
     ),
     Tick: $.rule('`').pushMode('TemplateString').exec(state => state.tplDepth++),
     EscapeSequence: $('\\', $.any),

@@ -1,1 +1,1 @@
-export { AST } from './AST';
+export { AST, ASTNodeMap, ASTNodes } from './AST';

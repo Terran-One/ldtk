@@ -10,8 +10,8 @@ const parser = Parser.create('ToyParser', lexer, $ => {
   return {
     program: $(
       r.cmdsep.star,
-      $(r.import_, $.or(r.cmdsep.plus, EOF)).star,
-      $(r.root, $.or(r.cmdsep.plus, EOF)).star,
+      $(r.import_, r.cmdsep.plus.lazy).star,
+      $(r.root, r.cmdsep.plus.lazy).star,
       EOF,
     ),
     
