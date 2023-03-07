@@ -28,14 +28,16 @@ export async function generateVisitor(project: Project, parser: Parser) {
     }
   });
   
+  // import LDTK AST node types
+  file.addImportDeclaration({
+    moduleSpecifier: '@terran-one/ldtk',
+    namedImports: ['RuleASTNode', 'OptionsASTNode'],
+  });
+  
   // import context types
   file.addImportDeclaration({
     moduleSpecifier: `./antlr/${parser.name}`,
     namedImports: [parser.name, ...contexts],
-  });
-  file.addImportDeclaration({
-    moduleSpecifier: './utils',
-    namedImports: ['OptionsASTNode', 'RuleASTNode', 'VisitorMap', 'WithEOF'],
   });
   
   // alias root rule AST node for convenience
@@ -80,44 +82,25 @@ function writeVisitRule({ parser, obj, rulename, matcher }: WriteVisitRuleParams
   obj.write(rulename, w => {
     w.write(`(ctx: ${contextName(rulename)}): ${astNodeName(rulename)} => `).block(() => {
       const {
-        hasEOF,
         rules,
         tokens,
       } = analyzeRule(matcher);
       
-      // collect sub-rules/children
+      // collect sub-rules & tokens
       w.write('const rules = ').obj(obj => {
         rules.forEach(rule => {
           obj.write(rule, `ctx.getRuleContexts(${contextName(rule)}).map(item => visit.${rule}(item))`);
         })
-      }).writeline(';');
+      }).write(';').nl(2);
       
-      // return specialized ASTNode structure
-      w.write('return ');
-      w.obj(obj => {
-        obj.write('type', `'${rulename}'`);
-        obj.write('family', "'rule'");
-        obj.write('ctx', 'ctx');
-        
-        hasEOF && obj.write('EOF', `ctx.getTokens(${parser.name}.EOF)[0]`);
-        
-        // two reasons for using various `any`:
-        // 1) if children is empty, reduce returns unknown, which cannot be assigned to unknown[]
-        // 2) Object.values(rules) is too strict & needs to be loosened
-        obj.write('children', 'Object.values(rules).reduce((prev, curr) => [...prev as any, ...curr as any], []) as any');
-        
-        if (rules.length) {
-          obj.write('rules', 'rules');
-        }
-        
-        if (tokens.length) {
-          obj.write('tokens', w => w.obj(obj => {
-            tokens.forEach(token => {
-              obj.write(token, `ctx.getTokens(${parser.name}.${token})`);
-            })
-          }));
-        }
-      });
+      w.write('const tokens = ').obj(obj => {
+        tokens.forEach(token => {
+          obj.write(token, `ctx.getTokens(${parser.name}.${token})`);
+        })
+      }).write(';').nl(2);
+      
+      // return RuleASTNode subclass
+      w.write(`return new ${astNodeName(rulename)}('${rulename}', ctx, rules, tokens);`);
     });
   });
 }
@@ -138,30 +121,25 @@ function writeVisitOption({ parser, obj, rulename, matcher }: WriteVisitOptionsP
     w.write(`(ctx: ${contextName(rulename)}): ${astNodeName(rulename)} => `).block(() => {
       // collect child context choices
       w.write('const opts = [').nl().indent(() => {
-        choices.forEach(({label}) => {
-          const ctxName = contextName(label);
-          w.write(`ctx instanceof ${ctxName} && visit.${label}(ctx as ${ctxName}),`);
-        });
-      }).writeline('];');
+        w.join(
+          ', ',
+          choices.map(({label}) =>
+            `ctx instanceof ${contextName(label)} && visit.${label}(ctx)`
+          ),
+          true,
+        );
+      }).writeline('].filter(ctx => Boolean(ctx)) as any[];');
       
       // assert exactly one is valid
-      w.writeline('if (opts.filter(ctx => !!ctx).length > 1) throw Error("Multiple Option Contexts found");');
+      w.writeline(`if (opts.length > 1) throw Error("Multiple valid Options found for rule ${rulename}");`);
       w.nl();
       
-      w.writeline('const option = opts.find(ctx => !!ctx);');
-      w.writeline('if (!option) throw Error("No Option Context");');
+      w.writeline('const [option] = opts;');
+      w.writeline(`if (!option) console.error("No valid Option found for rule ${rulename}");`);
       w.nl();
       
       // build result structure
-      w.write(`return `);
-      w.obj(obj => {
-        obj.write('type', `'${rulename}'`);
-        obj.write('family', "'options'");
-        obj.write('ctx', 'ctx');
-        obj.write('option', 'option');
-        obj.write('children', '[option]');
-      });
-      w.write(';');
+      w.write(`return new ${astNodeName(rulename)}('${rulename}', ctx, option);`);
     });
   });
   
@@ -208,18 +186,9 @@ function generateOptionNodeType(file: SourceFile, rule: ParserRule, matcher: Mat
   
   // generate AST node type for overarching label rule
   typemap[rule.name] = astNodeName(rule.name);
-  file.addTypeAlias({
+  file.addClass({
     name: astNodeName(rule.name),
-    type: writer => {
-      const w = new CodeWriter(writer);
-      w.write('OptionsASTNode<ASTMap, ');
-      w.write(`'${rule.name}', `);
-      w.write(contextName(rule.name)).write(', ');
-      w.write('[')
-       .join(', ', choices.map(c => `'${c.label}'`))
-       .write(']');
-      w.write('>');
-    },
+    extends: `OptionsASTNode<'${rule.name}'>`,
     isExported: true,
   });
   
@@ -231,29 +200,28 @@ function generateOptionNodeType(file: SourceFile, rule: ParserRule, matcher: Mat
 
 function generateMatcherNodeType(file: SourceFile, name: string, matcher: ParserMatcher, typemap: Record<string, string>) {
   const {
-    hasEOF,
     rules,
     tokens,
   } = analyzeRule(matcher);
   
   typemap[name] = astNodeName(name);
-  file.addTypeAlias({
+  file.addClass({
     name: astNodeName(name),
-    type: writer => {
+    extends: writer => {
       const w = new CodeWriter(writer);
-      w.write('RuleASTNode<ASTMap, ');
-      w.write(`'${name}', `);
-      w.write(contextName(name)).write(', ');
-      w.write('[')
-       .join(', ', rules.map(r => `'${r}'`))
-       .write(']')
-       .write(', ');
-      w.write('[')
-       .join(', ', tokens.map(t => `'${t}'`))
-       .write(']');
-      w.write('>');
+      w.write(`RuleASTNode<'${name}', `);
       
-      if (hasEOF) w.write(' & WithEOF');
+      if (rules.length)
+        w.join(' | ', rules.map(r => `'${r}'`)).write(', ');
+      else
+        w.write('string, ');
+      
+      if (tokens.length)
+        w.join(' | ', tokens.map(t => `'${t}'`));
+      else
+        w.write('string');
+      
+      w.write('>');
     },
     isExported: true,
   });

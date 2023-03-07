@@ -51,7 +51,6 @@ async function generateCode(parser: Parser) {
   project.manipulationSettings.set({ indentationText: IndentationText.TwoSpaces });
   
   await Promise.all([
-    generateUtils(project, parser),
     generateLDTKLexer(project, parser),
     generateLexer(project, parser),
     generateParser(project, parser),
@@ -59,25 +58,4 @@ async function generateCode(parser: Parser) {
   ])
   
   await project.save();
-}
-
-/** Generate utils.ts from template */
-async function generateUtils(project: Project, parser: Parser) {
-  const fs = project.getFileSystem();
-  const srcPath = `${await tplDir()}/utils.tpl.ts`;
-  const destPath = `${DIR}/utils.ts`;
-  await fs.copy(srcPath, destPath);
-  const file = project.addSourceFileAtPath(destPath);
-  
-  const rootRule = parser.rules[0];
-  
-  file.addImportDeclaration({
-    moduleSpecifier: `./antlr/${parser.name}`,
-    namedImports: [contextName(rootRule.name)],
-  });
-  
-  const entryType = file.getTypeAliasOrThrow('VisitorEntry');
-  entryType.set({
-    type: `{${rootRule.name}: (ctx: ${contextName(rootRule.name)}) => any}`,
-  });
 }

@@ -1,162 +1,85 @@
-import { ASTMap } from '../utils';
-import type { AnyVisitor, ASTNodeBase, Defined, OptionsASTNode, RuleASTNode, VisitorASTNodes } from '../types';
+import type { ASTNodeBase, Defined, IOptionsASTNode, IRuleASTNode } from '../types';
 
-type NodeMap = {
-  [K: string]: ASTNodeBase;
-}
-type NodeMapFrom<V extends AnyVisitor> = ASTMap<V>;
-type Nodes<V extends AnyVisitor> = VisitorASTNodes<V>;
-
-type TransformMap<M extends NodeMap> = {
+type AnyASTMap = Record<string, ASTNodeBase>;
+type TransformerMap<M extends AnyASTMap = any> = {
   [K in keyof M]?: (node: M[K]) => ASTNodeBase;
 }
 
-type TransformNodeMap<M extends NodeMap, T extends TransformMap<M>> =
-  Omit<M, keyof T> & { [K in keyof T & keyof M]: ReturnType<Defined<T[K]>> };
-type TransformNode<M extends NodeMap, T extends TransformMap<M>, N extends ASTNodeBase> =
-  N['type'] extends keyof T
-  ? TransformNodeGeneric<M, T, ReturnType<Defined<T[N['type']]>>>
-  : TransformNodeGeneric<M, T, N>;
-type TransformNodeGeneric<M extends NodeMap, T extends TransformMap<M>, N extends ASTNodeBase> =
-  N extends OptionsASTNode
-  ? (
-    & Omit<N, 'children' | 'option'>
-    & {
-        option: TransformNode<M, T, N['option']>;
-        children: [TransformNode<M, T, N['option']>];
-      }
-    )
-  : N extends RuleASTNode
-  ? (
-    & Omit<N, 'children' | 'rules'>
-    & { children: TransformNode<M, T, N['children'][number]>[] }
-    & (
-        N extends { rules: any }
-        ? { rules: { [K in keyof N['rules']]: TransformNode<M, T, N['rules'][K][number]>[] } }
-        : {}
-      )
-    )
-  : never;
+type ASTMapFromTransformer<T extends TransformerMap<any>> = {
+  [K in keyof T]: ReturnType<Defined<T[K]>>;
+}
 
-/** Abstract representation of an entire Abstract Syntax Tree. */
-export class AST<M extends NodeMap, Root extends ASTNodeBase> {
-  constructor(private _root: Root) {}
+/** Abstract representation of an entire AST, wrapped around an `ASTNodeBase` root.
+ * 
+ * The type argument `M` is the *"tracking map"*, which is a mapping of AST node names to their
+ * respective AST node types.
+ * 
+ * The `transform` method recursively transforms all nodes of a given type, and replaces the
+ * respective AST node type in the tracking map. The `augment` and `forget` methods do not alter
+ * the AST at runtime, but instead are convenient methods for altering the tracking map.
+ */
+export class AST<M extends AnyASTMap = AnyASTMap> {
+  constructor(public root: ASTNodeBase) {}
   
-  /** Transform existing node types into something else that resembles an ASTNodeBase. */
-  transform<T extends TransformMap<M>>(
-    transforms: T,
-  ): AST<TransformNodeMap<M, T>, TransformNode<M, T, Root>>
-  {
-    this._root = this._inner_transform(this._root, transforms, new Map());
+  /** Transform existing AST nodes, replacing their respective type from the tracking map. */
+  transform<M2 extends TransformerMap<M>>(transformer: M2): AST<Omit<M, keyof M2> & ASTMapFromTransformer<M2>> {
+    this.root = this._inner_transform(this.root, transformer);
     return this as any;
   }
   
-  /** Introduce a new AST node type into the node map.
-   * 
-   * Should be used after `transform` which is where the actual AST node is injected.
-   */
-  extend<Type extends Exclude<string, keyof M>, Node extends ASTNodeBase>(): AST<M & { [K in Type]: Node }, Root> {
-    return this as any;
-  }
-  
-  /** Drop a node from the node map.
-   * 
-   * Should be used after `transform` which is where the actual AST node is spliced out.
-   */
-  forget<Type extends keyof M>(type: Type): AST<Omit<M, Type>, Root> {
-    return this as any;
-  }
-  
-  private _inner_transform(node: ASTNodeBase, transforms: TransformMap<M>, transformed: Map<ASTNodeBase, ASTNodeBase>): any {
-    if (transformed.has(node)) return transformed.get(node);
+  protected _inner_transform(
+    node: ASTNodeBase,
+    transformer: TransformerMap,
+    transformed = new Map<ASTNodeBase, ASTNodeBase>(),
+  ) {
+    if (transformed.has(node))
+      return transformed.get(node)!;
+    transformed.set(node, node);
     
-    let newNode: any = node;
-    if (node.type in transforms)
-      newNode = transforms[node.type]!(node as any);
-    transformed.set(node, newNode);
-    return this._basic_transform(newNode, transforms, transformed);
-  }
-  
-  private _basic_transform(node: ASTNodeBase, transforms: TransformMap<M>, transformed: Map<ASTNodeBase, ASTNodeBase>): any {
-    if (node.family === 'options') {
-      node.option = this._inner_transform(node.option, transforms, transformed);
-      node.children = [node.option];
+    if (node.type in transformer) {
+      const newNode = transformer[node.type]!(node);
+      transformed.set(node, newNode);
+      node = newNode;
     }
-    else {
-      node.children = node.children.map(child => this._inner_transform(child, transforms, transformed));
-      if ('rules' in node) {
-        for (const key in node.rules) {
-          node.rules[key] = node.rules[key].map((child: any) => this._inner_transform(child, transforms, transformed));
-        }
-      }
-    }
-    return node;
+    return this._generic_transform(node, transformer, transformed);
   }
   
-  /** Find direct children of this represented AST's root of given `type`. */
-  findChildren<Type extends keyof M>(type: Type): M[Type][] {
-    return this.root.children.filter(child => child.type === type) as any;
-  }
-  
-  /** Recursively find all nodes of given `type` that adhere to given `pred`icate.
-   * 
-   * Effectively returns a subset of `find(type)` that passes the predicate.
-   */
-  findBy<Type extends keyof M>(type: Type, pred: (node: M[Type]) => boolean): M[Type][] {
-    return this.find(type).filter(pred);
-  }
-  
-  /** Find all nested children of given `type` up until a node of type `before`.
-   * 
-   * In a tree of this structure:
-   * |- A
-   *    |- B
-   *    |  \- C
-   *    \- B
-   *       \- C
-   *          \-B
-   * `findBefore('B', 'C')` would return the two `B` nodes that hierarchically appear before each `C` node.
-   */
-  findBefore<Type extends keyof M>(type: Type, before: keyof M): M[Type][] {
-    return [...this._inner_findBefore(type, before, this._root)] as any;
-  }
-  
-  private _inner_findBefore(type: keyof M, before: keyof M, node: ASTNodeBase, first = true, set = new Set<ASTNodeBase>()) {
-    // if first node is a `before` node itself, ignore it
-    if (!first && node.type === before) return set;
-    
-    // collect correct nodes
-    if (node.type === type) set.add(node);
-    
-    // recurse
-    if (node.family === 'options') {
-      this._inner_findBefore(type, before, node.option, false, set);
+  protected _generic_transform(_node: ASTNodeBase, transformer: TransformerMap, transformed: Map<ASTNodeBase, ASTNodeBase>) {
+    if (_node.family === 'options') {
+      const node = _node as IOptionsASTNode;
+      node.children = [node.option = this._inner_transform(node.option, transformer, transformed) as any];
     } else {
-      node.children.forEach(child => this._inner_findBefore(type, before, child, false, set));
+      const node = _node as IRuleASTNode;
+      node.rules = Object.fromEntries(
+        Object.entries(node.rules).map(
+          ([key, value]) =>
+            [key, value.map(child => this._inner_transform(child, transformer, transformed))]
+        )
+      );
+      node.children = node.children.map(c => this._inner_transform(c, transformer, transformed));
     }
-    
-    // finish
-    return set;
+    return _node;
   }
   
-  /** Find all nodes of given `type` deeply within the entire represented AST. */
+  /** Introduce a new AST node to the tracking map. */
+  augment<M2 extends AnyASTMap>(): AST<Omit<M, keyof M2> & M2> {
+    return this as any;
+  }
+  
+  /** Drop an old AST node from the tracking map. */
+  forget<Type extends keyof M>(...types: Type[]): AST<Omit<M, Type>> {
+    return this as any;
+  }
+  
   find<Type extends keyof M>(type: Type): M[Type][] {
-    return [...this._inner_find(type, this._root)] as any;
+    return [...this._find(this.root, type)] as any;
   }
   
-  private _inner_find(type: keyof M, node: ASTNodeBase, set = new Set<ASTNodeBase>()) {
-    if (node.type === type) set.add(node);
-    if (node.family === 'options') {
-      this._inner_find(type, node.option, set);
-    } else {
-      node.children.forEach(child => this._inner_find(type, child, set));
+  protected _find(node: ASTNodeBase, type: keyof M, result = new Set<ASTNodeBase>()) {
+    if (node.type === type) {
+      result.add(node);
     }
-    return set;
+    node.children.forEach(child => this._find(child, type, result));
+    return result;
   }
-  
-  static from<M extends AnyVisitor, Root extends Nodes<M>>(visit: M, root: Root) {
-    return new AST<NodeMapFrom<M>, Root>(root);
-  }
-  
-  get root() { return this._root; }
 }

@@ -95,16 +95,22 @@ export class CodeWriter {
   }
   
   /** Write many things in sequence to the code, with an optional separator which defaults to ' ' */
-  join(thing: WritableWithIndex[]): this;
-  join(sep: string, thing: WritableWithIndex[]): this;
+  join(thing: WritableWithIndex[], newline?: boolean): this;
+  join(sep: string, thing: WritableWithIndex[], newline?: boolean): this;
   join(...args: any[]) {
-    let sep = ' ', thing: WritableWithIndex[];
+    let sep = ' ', thing: WritableWithIndex[], newline = false;
     if (args.length === 1) [thing] = args;
-    else [sep, thing] = args;
+    else if (args.length === 2) {
+      if (typeof args[1] === 'boolean') [thing, newline] = args;
+      else [sep, thing] = args;
+    }
+    else [sep, thing, newline = false] = args;
     
     thing.forEach((curr, i) => {
-      if (i > 0)
+      if (i > 0) {
         this.write(sep);
+        if (newline) this.nl();
+      }
       
       if (typeof curr === 'function') {
         curr(this, i);

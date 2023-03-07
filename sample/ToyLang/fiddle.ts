@@ -1,23 +1,59 @@
 import { TerminalNode } from 'antlr4ts/tree/TerminalNode';
-import { FnArgContext, VarArgsContext } from '../../generated/antlr/ToyParser';
 import { Parser } from '../../generated/Parser';
-import { ExprxASTNode, visit } from '../../generated/Visitor';
-import { utils } from '../../src';
-import { AST } from '../../src/transform/AST';
+import {
+  ASTMap,
+  ExprxASTNode,
+  FnArgASTNode as FnArgASTNodeBase,
+  StringInterpolationASTNode,
+  VarArgsASTNode,
+} from '../../generated/Visitor';
+import { AST, ASTNodeBase, IOptionsASTNode, IRuleASTNode, IVirtualASTNode, Location, ParserRuleContext, tokensLocation, utils } from '../../src';
+import { collectTokens, getCodeRange, groupBy, joinTokens, sortNodes, sortTokens } from '../../src/utils';
 
-type FooASTNode = {
-  type: 'foo';
-  family: 'rule';
-  children: never[];
-}
-type FnArgASTNode = {
-  type: 'fnArg';
-  family: 'rule';
-  ctx: FnArgContext | VarArgsContext;
+class FnArgASTNode implements IRuleASTNode {
+  type = 'fnArg' as const;
+  family = 'rule' as const;
+  ctx: ParserRuleContext;
   name: string;
   variadic: boolean;
   defaultValue: ExprxASTNode | undefined;
-  children: never[];
+  rules: Record<string, ASTNodeBase[]>;
+  tokens: Record<string, TerminalNode[]>;
+  children: ASTNodeBase[];
+  location: Location;
+  
+  constructor(base: FnArgASTNodeBase | VarArgsASTNode) {
+    // copy props
+    this.ctx = base.ctx;
+    this.tokens = base.tokens;
+    this.rules = base.rules;
+    this.children = base.children;
+    this.location = base.location;
+    
+    // compute props
+    this.name = base.tokens.Ident[0].text;
+    this.variadic = base.type === 'varArgs';
+    this.defaultValue = base.rules.exprx?.[0] as any;
+  }
+}
+
+class TemplateStringPieceASTNode implements IRuleASTNode {
+  type = 'templateStringPiece' as const;
+  family = 'rule' as const;
+  ctx: undefined;
+  rules: Record<string, ASTNodeBase[]>;
+  tokens: Record<string, TerminalNode[]>;
+  children: ASTNodeBase[];
+  location: Location;
+  value: string;
+  
+  constructor(tokens: TerminalNode[]) {
+    this.tokens = groupBy(tokens, t => t.symbol.type);
+    this.rules = {};
+    this.children = [];
+    this.value = joinTokens(tokens).text;
+    this.location = tokensLocation(tokens);
+  }
 }
 
 const src = `
@@ -40,32 +76,17 @@ print \`foo\${sum(...(process.argv as Numbers))}bar\`
 `
 
 const ast = parse(src);
-console.log(ast.find('expr').map(expr => expr.foo).filter(foo => foo === 'bar').length)
-const root = ast.root.rules.roots[1];
-if (root.option.type !== 'ExprxRoot') throw Error('nope');
-
-const exprx = root.option.rules.exprx[0];
-if (exprx.option.type !== 'ExprExprx') throw Error('nope');
-
-console.log(exprx.option.rules.expr[0].foo);
-console.log(ast.find('fnArg')[0].variadic);
-
-const literal = ast.find('literal')[0];
-if (literal) {
-  console.log(`${literal.option.type} is primitive: ${literal.primitive}`);
-} else {
-  console.log('no literal found');
-}
 
 // template strings are a bit weird, b/c tokens match individual characters rather than parts
-const tplstr = ast.find('templateString')[0];
-if (!tplstr) throw 'no template string found';
-if (tplstr.children.length !== 1) throw 'template string has wrong number of children';
-console.log('template string:', ast.find('templateString')[0].ctx.text);
+// const tplstr = ast.find('templateString')[0];
+// if (!tplstr) throw 'no template string found';
+// if (tplstr.children.length !== 3) throw 'template string has wrong number of children';
+// console.log('template string:', getSourceFromLocation(src, ast.find('templateString')[0]!.location));
+utils.dump(src, ast.root);
 
 export function parse(src: string) {
   const parser = Parser.fromString(src);
-  const ast = AST.from(visit, parser.process())
+  const ast = new AST<ASTMap>(parser.process())
     .transform({
       program(node) {
         const { rules } = node;
@@ -87,39 +108,17 @@ export function parse(src: string) {
           module: node.tokens.String[0].text.substring(1, node.tokens.String[0].text.length-1),
         }
       },
-      expr(node) {
-        return {
-          ...node,
-          foo: 'bar',
-        }
-      },
       array(node) {
         return {
           ...node,
           values: node.rules.exprx,
         }
       },
-      fnArg(node): FnArgASTNode {
-        return {
-          type: 'fnArg',
-          family: 'rule',
-          ctx: node.ctx,
-          name: node.tokens.Ident[0].text,
-          variadic: false,
-          defaultValue: node.rules.exprx[0],
-          children: [],
-        }
+      fnArg(node) {
+        return new FnArgASTNode(node);
       },
-      varArgs(node): FnArgASTNode {
-        return {
-          type: 'fnArg',
-          family: 'rule',
-          ctx: node.ctx,
-          name: node.tokens.Ident[0].text,
-          variadic: true,
-          defaultValue: undefined,
-          children: [],
-        }
+      varArgs(node) {
+        return new FnArgASTNode(node);
       },
       literal(node) {
         return {
@@ -128,20 +127,26 @@ export function parse(src: string) {
         }
       },
       templateString(node) {
+        const tokenlist = sortTokens([...node.tokens.EscapeSequence, ...node.tokens.TplStringContent])
+        const tokensublists = collectTokens(tokenlist);
+        
+        const strings = tokensublists.map(ts => new TemplateStringPieceASTNode(ts));
+        const interpolations = node.rules.stringInterpolation as StringInterpolationASTNode[];
+        const exprs = interpolations.map((n: StringInterpolationASTNode) => n.rules.exprx[0]); // cut out intermittent nodes
+        
         return {
-          type: 'templateString',
-          family: 'rule',
-          ctx: node.ctx,
-          parts: node.tokens.TplStringContent.concat(node.tokens.EscapeSequence)
-            .sort((a, b) => a.symbol.startIndex - b.symbol.startIndex),
-          children: node.rules.stringInterpolation.map(n => n.rules.exprx[0]), // cut out intermittent nodes
-        }
+          ...node,
+          rules: {
+            strings,
+            exprs,
+          },
+          children: sortNodes([...strings, ...exprs]),
+        };
       },
     })
+    .augment<{
+      templateStringPiece: TemplateStringPieceASTNode,
+    }>()
     .forget('cmdsep')
   return ast;
-}
-
-function stripQuotes(text: TerminalNode) {
-  return text.text.substring(1, text.text.length-1);
 }

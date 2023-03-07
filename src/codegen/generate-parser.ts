@@ -2,7 +2,7 @@ import path from 'path';
 import { Project, Scope } from 'ts-morph';
 import { Parser } from '../langkit';
 import { CodeWriter } from './code-writer';
-import { contextName, DIR } from './utils';
+import { DIR } from './utils';
 
 export function generateParser(project: Project, parser: Parser,) {
   const { lexer } = parser;
@@ -23,54 +23,32 @@ export function generateParser(project: Project, parser: Parser,) {
     },
     {
       moduleSpecifier: `./antlr/${ParserIdent}`,
-      namedImports: [ParserIdent, contextName(rootRule.name)],
+      namedImports: [ParserIdent],
     },
     {
       moduleSpecifier: './Visitor',
-      namedImports: ['visit'],
+      namedImports: ['ASTMap', 'visit'],
     },
   ]);
-  
-  // type Visitor
-  file.addTypeAlias({
-    name: 'Visitor',
-    type: writer => {
-      const w = new CodeWriter(writer);
-      w.block(() => {
-        w.writeline('// entry point');
-        w.write(`${rootRule.name}: (ctx: ${contextName(rootRule.name)}) => any;`);
-      });
-    },
-  });
   
   const cls = file.addClass({
     name: 'Parser',
     isExported: true,
-    typeParameters: [
-      {
-        name: 'V',
-        constraint: 'Visitor',
-        default: 'typeof visit',
-      }
-    ]
   });
   
   cls.addConstructor({
     parameters: [
       {
-        name: '_lexer',
+        name: 'lexer',
         scope: Scope.Public,
+        isReadonly: true,
         type: LexerIdent,
       },
       {
-        name: '_parser',
+        name: 'parser',
         scope: Scope.Public,
+        isReadonly: true,
         type: ParserIdent,
-      },
-      {
-        name: '_visit',
-        scope: Scope.Public,
-        type: 'V',
       },
     ],
   });
@@ -78,10 +56,10 @@ export function generateParser(project: Project, parser: Parser,) {
   // process()
   cls.addMethod({
     name: 'process',
-    returnType: 'ReturnType<V["program"]>',
+    returnType: `ASTMap['program']`,
     statements: writer => {
       const w = new CodeWriter(writer);
-      w.write(`return this._visit.${rootRule.name}(this._parser.${rootRule.name}());`);
+      w.write(`return visit.${rootRule.name}(this.parser.${rootRule.name}());`);
     },
   });
   
@@ -99,7 +77,7 @@ export function generateParser(project: Project, parser: Parser,) {
       const w = new CodeWriter(writer);
       w.writeline(`const lexer = new ${LexerIdent}(CharStreams.fromString(source));`);
       w.writeline(`const parser = new ${ParserIdent}(new CommonTokenStream(lexer));`);
-      w.writeline(`return new Parser(lexer, parser, visit);`);
+      w.writeline(`return new Parser(lexer, parser);`);
     },
   });
   
