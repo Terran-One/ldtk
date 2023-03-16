@@ -38,6 +38,20 @@ export class ChoiceMatcher implements IGrammarMatcher {
   }
 }
 
+/** Negate whatever is contained within this matcher.
+ * 
+ * **Caveat:** Not everything can be negated. Specifically, under the hood, LDTK distinguishes
+ * between literals & tokens. In both cases, only sets of singular elements can be negated. For
+ * tokens, this means e.g. `~(<Ident> | <String>)`, but not `~(<Ident> <String>)`. For literals,
+ * this means e.g. `~[a-z]`, but not `~(abc)`.
+ */
+export class NegativeMatcher implements IGrammarMatcher {
+  readonly type = 'negative' as const;
+  
+  constructor(public match: IGrammarMatcher) {}
+  toAntlr(): string { return `~${this.match.toAntlr(this)}` }
+}
+
 export class AnyMatcher implements IGrammarMatcher {
   readonly type = 'any' as const;
   toAntlr() { return '.'; }

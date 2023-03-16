@@ -1,25 +1,32 @@
-import { AnyMatcher, CharsetMatcher, ChoiceMatcher, EpsilonMatcher, GroupMatcher, IGrammarMatcher, LiteralMatcher, MultipleMatcher, RuleMatcher, SequenceMatcher } from './matchers';
+import { AnyMatcher, CharsetMatcher, ChoiceMatcher, EpsilonMatcher, GroupMatcher, IGrammarMatcher, LiteralMatcher, MultipleMatcher, NegativeMatcher, RuleMatcher, SequenceMatcher } from './matchers';
 
 const punctuation = '(){}[]<>/\\=-+*?,;:!@#$%^&~\'"`';
 const identifierChars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_';
 
 /** Tagged template function for parsing rules & injecting custom grammar matchers with interpolations. */
-export default function rule(strings: TemplateStringsArray, ...args: IGrammarMatcher[]): IGrammarMatcher {
+export default function match(strings: TemplateStringsArray, ...args: IGrammarMatcher[]): IGrammarMatcher {
   const strs = strings.raw.map(s => s.trim().replace(/\s+/g, ' '));
   const mixed = zip(strs, args).flat(1).filter(Boolean);
   return new RuleParser(mixed as any[]).parse();
 }
 
+/** The result of a parsing step. */
 enum ParsingResult {
+  /** Indicates nothing was parsed, and that additional attempts should be made. */
   NotParsed = 0,
+  /** Indicates a word was successfully parsed. */
   Parsed,
+  /** Indicates we should immediately terminate further parsing. Used e.g. to terminate group parsing. */
   Terminate,
+  /** Indicates that whatever was parsed affects the *next* word */
+  SideEffect,
 }
 
 class RuleParser {
   #piece = 0;
   #offset = 0;
   #groupDepth = 0;
+  #negate = false;
   options = {
     caseSensitive: true,
   }
@@ -44,7 +51,11 @@ class RuleParser {
       if (typeof piece === 'string') {
         result = this._parsePiece(choices);
       } else {
-        choices.push(piece);
+        if (this._nomNegate()) {
+          choices.push(new NegativeMatcher(piece));
+        } else {
+          choices.push(piece);
+        }
         this._nextPiece();
       }
     }
@@ -56,6 +67,7 @@ class RuleParser {
   protected _parsePiece(choices: Choices) {
     let result = ParsingResult.NotParsed;
     while (result !== ParsingResult.Terminate && this.#offset < this._getStringPiece().length) {
+      const negate = this._nomNegate();
       const c = this.char();
       if (c === ' ') {
         this.nom();
@@ -67,6 +79,9 @@ class RuleParser {
         choices.push(this._parseLiteral());
         this._parseSuffix(choices);
       }
+      
+      if (negate)
+        choices.swapTail(tail => new NegativeMatcher(tail));
     }
     
     if (result !== ParsingResult.Terminate) {
@@ -121,6 +136,10 @@ class RuleParser {
         this.nom();
         choices.push(new AnyMatcher());
         return ParsingResult.Parsed;
+      case '~':
+        this.nom();
+        this.#negate = true;
+        return ParsingResult.SideEffect;
     }
     if (punctuation.includes(c))
       throw Error('Unexpected punctuation: ' + c);
@@ -276,6 +295,11 @@ class RuleParser {
   protected char() { return this._getStringPiece()[this.#offset] }
   protected prevChar() { return this._getStringPiece()[this.#offset-1] }
   protected nom() { return this._getStringPiece()[this.#offset++] }
+  protected _nomNegate() {
+    const neg = this.#negate;
+    this.#negate = false;
+    return neg;
+  }
 }
 
 /** Helper class for building a ChoiceMatcher from string rep */
