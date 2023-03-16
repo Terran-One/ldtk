@@ -47,7 +47,10 @@ export class LiteralMatcher implements IGrammarMatcher {
   readonly type = 'literal' as const;
   
   constructor(public literal: string) {}
-  toAntlr() { return this.literal; }
+  toAntlr() { return this.escapedLiteral; }
+  get escapedLiteral() {
+    return '"' + this.literal.replace(/"/g, '\\"').replace(/\\/g, '\\\\') + '"';
+  }
 }
 
 export class RuleMatcher implements IGrammarMatcher {
@@ -88,6 +91,13 @@ export class MultipleMatcher implements IGrammarMatcher {
     if (this.lazy) result += '?';
     return result;
   }
+}
+
+export class CharsetMatcher implements IGrammarMatcher {
+  readonly type = 'range' as const;
+  
+  constructor(public charset: string) {}
+  toAntlr() { return `[${this.charset}]`; }
 }
 
 /** Empty matcher. Simply prints '' when calling `toAntlr()`. */

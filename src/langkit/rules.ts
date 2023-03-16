@@ -1,11 +1,11 @@
-import { AnyMatcher, ChoiceMatcher, EpsilonMatcher, GroupMatcher, IGrammarMatcher, LiteralMatcher, MultipleMatcher, RuleMatcher, SequenceMatcher } from './matchers';
+import { AnyMatcher, CharsetMatcher, ChoiceMatcher, EpsilonMatcher, GroupMatcher, IGrammarMatcher, LiteralMatcher, MultipleMatcher, RuleMatcher, SequenceMatcher } from './matchers';
 
 const punctuation = '(){}[]<>/\\=-+*?,;:!@#$%^&~\'"`';
 const identifierChars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_';
 
 /** Tagged template function for parsing rules & injecting custom grammar matchers with interpolations. */
 export default function rule(strings: TemplateStringsArray, ...args: IGrammarMatcher[]): IGrammarMatcher {
-  const strs = strings.map(s => s.trim().replace(/\s+/g, ' '));
+  const strs = strings.raw.map(s => s.trim().replace(/\s+/g, ' '));
   const mixed = zip(strs, args).flat(1).filter(Boolean);
   return new RuleParser(mixed as any[]).parse();
 }
@@ -112,6 +112,11 @@ class RuleParser {
         return ParsingResult.Parsed;
       case '>':
         throw Error('Unmatched closing angle bracket');
+      case '[':
+        choices.push(this._parseCharset());
+        return ParsingResult.Parsed;
+      case ']':
+        throw Error('Unmatched closing bracket');
       case '.':
         this.nom();
         choices.push(new AnyMatcher());
@@ -154,6 +159,24 @@ class RuleParser {
     }
     
     return new LiteralMatcher(literal);
+  }
+  
+  /** Parse charset (`[...]`) */
+  protected _parseCharset(): CharsetMatcher {
+    if (this.nom() !== '[')
+      throw Error('Unexpected non-bracket character: ' + this.prevChar());
+    
+    const piece = this._getStringPiece();
+    const start = this.#offset;
+    while (this.#offset < piece.length && this.char() !== ']') {
+      if (this.char() === '\\')
+        ++this.#offset;
+      ++this.#offset;
+    }
+    const end = this.#offset;
+    if (this.nom() !== ']')
+      throw Error('Unexpected non-bracket character: ' + this.prevChar());
+    return new CharsetMatcher(piece.slice(start, end));
   }
   
   protected _parseReference(): RuleMatcher {
