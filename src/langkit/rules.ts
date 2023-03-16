@@ -54,10 +54,8 @@ class RuleParser {
   
   /** Parse the current piece indicated by `this.pieces[this.#piece]` */
   protected _parsePiece(choices: Choices) {
-    const piece = this._getStringPiece();
-    
     let result = ParsingResult.NotParsed;
-    while (result !== ParsingResult.Terminate && this.#offset < piece.length) {
+    while (result !== ParsingResult.Terminate && this.#offset < this._getStringPiece().length) {
       const c = this.char();
       if (c === ' ') {
         this.nom();
@@ -72,7 +70,7 @@ class RuleParser {
     }
     
     if (result !== ParsingResult.Terminate) {
-      if (this.#offset < piece.length) throw Error('Expected end of piece');
+      if (this.#offset < this._getStringPiece().length) throw Error('Expected end of piece');
       this._nextPiece();
     }
     
