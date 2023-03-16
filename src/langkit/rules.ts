@@ -38,12 +38,14 @@ class RuleParser {
   protected _parse(choices = new Choices()) {
     let result = ParsingResult.NotParsed;
     while (result !== ParsingResult.Terminate && this.#piece < this.pieces.length) {
-      const piece = this._getStringPiece();
+      // cannot use `this._getStringPiece()` b/c we're also trying to handle `IGrammarMatcher`s
+      const piece = this.pieces[this.#piece];
       
       if (typeof piece === 'string') {
         result = this._parsePiece(choices);
       } else {
         choices.push(piece);
+        this._nextPiece();
       }
     }
     
@@ -71,8 +73,7 @@ class RuleParser {
     
     if (result !== ParsingResult.Terminate) {
       if (this.#offset < piece.length) throw Error('Expected end of piece');
-      ++this.#piece;
-      this.#offset = 0;
+      this._nextPiece();
     }
     
     return result;
@@ -214,6 +215,13 @@ class RuleParser {
       throw Error('Invalid multiplicity min/max');
     
     choices.swapTail(tail => new MultipleMatcher(tail, {min, max}));
+  }
+  
+  /** Advance to the `n`th next piece & reset internal offset */
+  protected _nextPiece() {
+    ++this.#piece;
+    this.#offset = 0;
+    return this;
   }
   
   startsWith(s: string) {
