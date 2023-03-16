@@ -236,6 +236,7 @@ class RuleParser {
       throw Error('Invalid multiplicity min/max');
     
     choices.swapTail(tail => new MultipleMatcher(tail, {min, max}));
+    this.#offset += matches[0].length;
   }
   
   /** Advance to the `n`th next piece & reset internal offset */

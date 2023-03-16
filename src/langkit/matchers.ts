@@ -86,7 +86,16 @@ export class MultipleMatcher implements IGrammarMatcher {
       case '*': result = `${this.match.toAntlr(this)}*`; break;
       case '+': result = `${this.match.toAntlr(this)}+`; break;
       case '?': result = `${this.match.toAntlr(this)}?`; break;
-      default: result = `${this.match.toAntlr(this)}{${this.kind.min},${this.kind.max}}`; break;
+      default: {
+        let min: number | string = this.kind.min || '';
+        let max: number | string = this.kind.max;
+        if (max && max === Infinity) max = '';
+        if (min === max)
+          result = `${this.match.toAntlr(this)}{${min}}`;
+        else
+          result = `${this.match.toAntlr(this)}{${min},${max}}`;
+        break;
+      }
     }
     if (this.lazy) result += '?';
     return result;
