@@ -40,9 +40,7 @@ dist/**/*
 # ignore cache
 .yarn/
 .pnp.*
-
-# ignore .npmrc which possibly contains sensitive credentials
-.npmrc
+.yarnrc.yml
 
 # ignore volatile & temporary files
 /generated

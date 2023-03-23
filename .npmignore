@@ -6,6 +6,7 @@ sample/
 src/
 tmp/
 .gitignore
+.npmrc
 .yarnrc.yml
 tsconfig.json
 yarn.lock

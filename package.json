@@ -14,6 +14,9 @@
 		"typescript": "^4.9.3"
 	},
 	"scripts": {
+		"prepack": "npm run build",
+		"postpack": "rm -rf dist",
+		"publish": "yarn npm publish",
 		"build": "rm -rf dist && tsc",
 		"build:types": "tsc --declaration --emitDeclarationOnly",
 		"sample:gen:toylang": "ts-node ./sample/ToyLang/generate.ts"
