@@ -32,13 +32,50 @@ export interface IRuleASTNode extends ASTNodeCommon {
   tokens: Record<string, TerminalNode[]>;
 }
 
+export abstract class RuleASTNodeBase<Type extends string> implements IRuleASTNode {
+  readonly family = 'rule' as const;
+  abstract tokens: Record<string, TerminalNode[]>;
+  abstract rules: Record<string, ASTNodeBase[]>;
+  abstract children: ASTNodeBase[];
+  
+  constructor(
+    public readonly type: Type,
+    public ctx?: ParserRuleContext,
+    public location?: Location,
+  ) {}
+}
+
 export interface IOptionsASTNode extends ASTNodeCommon {
   family: 'options';
   option: ASTNodeBase;
 }
 
+export abstract class OptionsASTNodeBase<Type extends string> implements IOptionsASTNode {
+  readonly family = 'options' as const;
+  abstract option: ASTNodeBase;
+  
+  constructor(
+    public readonly type: Type,
+    public ctx?: ParserRuleContext,
+    public location?: Location,
+  ) {}
+  
+  get children() { return [this.option]; }
+}
+
 export interface IVirtualASTNode extends ASTNodeCommon {
   family: 'virtual';
+}
+
+export class VirtualASTNodeBase<Type extends string> implements IVirtualASTNode {
+  readonly family = 'virtual' as const;
+  
+  constructor(
+    public readonly type: Type,
+    public ctx?: ParserRuleContext,
+    public location?: Location,
+    public children: ASTNodeBase[] = [],
+  ) {}
 }
 
 export class RuleASTNode<
