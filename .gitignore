@@ -37,8 +37,12 @@ Thumbs.db
 # Ignore built ts files
 dist/**/*
 
-# ignore yarn.lock
-yarn.lock
+# ignore cache
+.yarn/
+.pnp.*
+
+# ignore .npmrc which possibly contains sensitive credentials
+.npmrc
 
 # ignore volatile & temporary files
 /generated
